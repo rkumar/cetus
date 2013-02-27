@@ -5,7 +5,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-02-27 15:49
+#  Last update: 2013-02-28 01:49
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 #  TODO - refresh should requery lines and cols and set pagesize
@@ -14,6 +14,7 @@ require 'readline'
 require 'io/wait'
 # http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
 require 'shellwords'
+require 'fileutils'
 # -- requires 1.9.3 for io/wait
 # -- cannot do with Highline since we need a timeout on wait, not sure if HL can do that
 
@@ -57,6 +58,11 @@ $bindings = {
   "Q"   => "quit_command",
   "RIGHT"   => "column_next",
   "LEFT"   => "column_next 1",
+  "C-x"   => "file_actions",
+  "M--"   => "columns_incdec -1",
+  "M-+"   => "columns_incdec 1",
+  "S"     =>  "command_file list y ls -lh",
+  "L"     =>  "command_file Page n less",
 
   "M-?"   => "print_help",
   "F1"   => "print_help",
@@ -434,7 +440,8 @@ def open_file f
   if File.directory? f
     change_dir f
   elsif File.readable? f
-    system("$EDITOR #{Shellwords.escape(f)}")
+    $default_command ||= "$EDITOR"
+    system("#{$default_command} #{Shellwords.escape(f)} #{$default_command2}")
     f = Dir.pwd + "/" + f if f[0] != '/'
     $visited_files.insert(0, f)
     push_used_dirs Dir.pwd
@@ -643,8 +650,9 @@ def show_marks
   ch = get_char
   goto_bookmark(ch) if ch =~ /^[A-Z]$/
 end
+# MENU MAIN
 def main_menu
-  h = { "s" => "sort_menu", "f" => "filter_menu", "c" => "command_menu" , "x" => "extras"}
+  h = { "s" => "sort_menu", "f" => "filter_menu", "c" => "command_menu" , "B" => "bindkey", "x" => "extras"}
   menu "Main Menu", h
 end
 def toggle_menu
@@ -735,7 +743,8 @@ def command_menu
   # should be able to sort THIS listing and not rerun command. But for that I'd need to use
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
-  h = { "a" => "ack", "f" => "ffind", "l" => "locate", "t" => "today" }
+  h = { "a" => "ack", "f" => "ffind", "l" => "locate", "t" => "today", "D" => "default_command" }
+  ## TODO use readline for these
   ch, menu_text = menu "Command Menu", h
   case menu_text
   when "ack"
@@ -752,6 +761,17 @@ def command_menu
     $files = `locate #{pattern}`.split("\n")
   when "today"
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
+  when "default_command"
+    print "Selecting a file usually invokes $EDITOR, what command do you want to use repeatedly on selected files: "
+    $default_command = gets().chomp
+    if $default_command != ""
+      print "Second part of command (maybe blank): "
+      $default_command2 = gets().chomp
+    else
+      print "Cleared default command, will default to $EDITOR"
+      $default_command2 = nil
+      $default_command = nil
+    end
   end
 end
 def extras
@@ -761,10 +781,10 @@ def extras
   when "one_column"
     $pagesize = $grows
   when "multi_column"
-    $pagesize = 60
+    #$pagesize = 60
     $pagesize = $grows * $gviscols
   when "columns"
-    print "How many columns would you like: 1-6 ?"
+    print "How many columns to show: 1-6 [current #{$gviscols}]? "
     ch = get_char
     ch = ch.to_i
     if ch > 0 && ch < 7
@@ -941,6 +961,10 @@ def perror text
   puts "#{RED}#{text}#{CLEAR}"
   get_char
 end
+def pause text=" Press a key ..."
+  print text
+  get_char
+end
 ## return shortcut for an index (offset in file array)
 # use 2 more arrays to make this faster
 #  TODO key needs to convert back to actual index
@@ -1022,10 +1046,26 @@ def delete_file
     refresh
   end
 end
+def command_file prompt, *command
+  pauseyn = command.shift
+  command = command.join " "
+  print "#{prompt} :: Enter file shortcut: "
+  file = ask_hint
+  perror "Command Cancelled" unless file
+  return unless file
+  if File.exists? file
+    file = Shellwords.escape(file)
+    pbold "#{command} #{file} (#{pauseyn})"
+    system "#{command} #{file}"
+    pause if pauseyn == "y"
+    refresh
+  end
+end
 def ask_hint
+  f = nil
   ch = get_char
   ix = get_index(ch, $viewport.size)
-  f = $viewport[ix]
+  f = $viewport[ix] if ix
   return f
 end
 def screen_settings
@@ -1045,6 +1085,92 @@ def column_next dir=0
   else
     $stact -= $grows
     $stact = 0 if $stact < 0
+  end
+end
+def file_actions
+  sct = $selected_files.size
+  file = nil
+  if sct > 0
+    text = "#{sct} files"
+    file = $selected_files
+  else
+    print "Choose a file: "
+    file = ask_hint
+    return unless file
+    text = file
+  end
+  case file
+  when Array
+    # escape the contents and create a string
+    files = Shellwords.join(file)
+  when String
+    files = Shellwords.escape(file)
+  end
+  h = { "d" => "delete", "m" => "move", "r" => "rename", "v" => ENV["EDITOR"] || "vim",
+    "l" => "less", "s" => "most" , "f" => "file" , "o" => "open", "x" => "dtrx", "z" => "zip" }
+  ch, menu_text = menu "File Menu for #{text}", h
+  case ch
+  when "q"
+  when "d"
+    print "rmtrash #{files}"
+    ch = get_char
+    return if ch == "n"
+    system "rmtrash #{files}"
+    refresh
+  when "m"
+    print "move #{text} to : "
+    target = gets().chomp
+    if target
+      FileUtils.mv text, target
+      refresh
+    else
+      perror "Cancelled move"
+    end
+  when "z"
+    print "Archive name: "
+    target = gets().chomp
+    # don't want a blank space or something screwing up
+    if target && target.size > 3
+      if File.exists? target
+        perror "Target (#{target}) exists"
+      else
+        system "tar zcvf #{target} #{files}"
+        refresh
+      end
+    end
+  else
+    return unless menu_text
+    print "#{menu_text} #{files}"
+    pause
+    print
+    system "#{menu_text} #{files}"
+    refresh
+    pause
+  end
+end
+def columns_incdec howmany
+  $gviscols += howmany.to_i
+  $gviscols = 1 if $gviscols < 1
+  $gviscols = 6 if $gviscols > 6
+  $pagesize = $grows * $gviscols
+end
+def bindkey
+  print 
+  pbold "Bind a capital letter to a external command"
+  print "Enter a capital letter to bind: "
+  ch = get_char
+  return if ch == "Q"
+  if ch =~ /^[A-Z]$/
+    print "Enter an external command to bind to #{ch}: "
+    com = gets().chomp
+    if com != ""
+      print "Enter prompt for command (blank if same as command): "
+      pro = gets().chomp
+      pro = com if pro == ""
+    end
+    print "Pause after output [y/n]: "
+    yn = get_char
+    $bindings[ch] = "command_file #{pro} #{yn} #{com}"
   end
 end
 
