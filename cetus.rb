@@ -5,9 +5,11 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-02-26 13:14
+#  Last update: 2013-02-27 15:05
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
+#  TODO - refresh should requery lines and cols and set pagesize
+#  let user decide how many cols he wants to see
 require 'readline'
 require 'io/wait'
 # http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
@@ -51,7 +53,10 @@ $bindings = {
   "C-i"   => "views",
   "?"   => "child_dirs",
   "ENTER"   => "select_first",
-
+  "D"   => "delete_file",
+  "Q"   => "quit_command",
+  "RIGHT"   => "column_next",
+  "LEFT"   => "column_next 1",
 
   "M-?"   => "print_help",
   "F1"   => "print_help",
@@ -152,18 +157,19 @@ def get_char
   end
 end
 
-#require 'highline/import'
-
 #$IDX="123456789abcdefghijklmnoprstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-$IDX="abcdefghijklmnoprstuvwy"
+$IDX="abcdefghijklmnopqrstuvwxy"
 $selected_files = Array.new
 $bookmarks = {}
 $mode = nil
-LINES=%x(tput lines).to_i
-COLS=%x(tput cols).to_i
-ROWS = LINES - 4
+$glines=%x(tput lines).to_i
+$gcols=%x(tput cols).to_i
+$grows = $glines - 3
 $pagesize = 60
-$pagesize = ROWS * 3
+$gviscols = 3
+$pagesize = $grows * $gviscols
+$stact = 0
+GMARK='*'
 CLEAR      = "\e[0m"
 BOLD       = "\e[1m"
 BOLD_OFF       = "\e[22m"
@@ -186,7 +192,7 @@ $viewctr = 0
 $history = []
 #$help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Command Mode  #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
 
-$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit "
+$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}Q#{BOLD_OFF} Quit "
 
   ## main loop which calls all other programs
 def run()
@@ -211,8 +217,8 @@ def run()
     end
     fl=$view.size
     $sta = 0 if $sta >= fl || $sta < 0
-    vp = $view[$sta, $pagesize]
-    fin = $sta + vp.size
+    $viewport = $view[$sta, $pagesize]
+    fin = $sta + $viewport.size
     $title ||= Dir.pwd
     system("clear")
     # title
@@ -220,8 +226,8 @@ def run()
     print "#{BOLD}#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto}#{CLEAR}\n"
     $title = nil
     # split into 2 procedures so columnate can e clean and reused.
-    buff = format vp
-    buff = columnate buff, ROWS
+    buff = format $viewport
+    buff = columnate buff, $grows
     # needed the next line to see how much extra we were going in padding
     #buff.each {|line| print "#{REVERSE}#{line}#{CLEAR}\n" }
     buff.each {|line| print line, "\n"  }
@@ -234,19 +240,25 @@ def run()
     ch = get_char
     #puts
     #break if ch == "q"
-    if ch == "q"
-      q_command
     #elsif  ch =~ /^[1-9a-zA-Z]$/
-    elsif  ch =~ /^[a-z]$/
+    if  ch =~ /^[a-zZ]$/
       # hint mode
-      select_hint vp, ch
+      select_hint $viewport, ch
       ctr = 0
     elsif ch == "BACKSPACE"
       $patt = $patt[0..-2]
       ctr = 0
     else
-      binding = $bindings[ch]
-      send(binding) if binding
+      #binding = $bindings[ch]
+      x = $bindings[ch]
+      x = x.split if x
+      if x
+        binding = x.shift
+        args = x
+        send(binding, *args) if binding
+      else
+        #perror "No binding for #{ch}"
+      end
       #p ch
     end
     break if $quitting
@@ -290,14 +302,20 @@ def columnate ary, sz
   wid = 30
   ars = ary.size
   ars = [$pagesize, ary.size].min
-  d = 4
+  d = 0
   if ars <= sz
-    wid = COLS - d
-  elsif ars < sz * 2
-    wid = COLS/2 - d
-  elsif ars < sz * 3
-    wid = COLS/3 - d
+    wid = $gcols - d
+  else
+    tmp = (ars * 1.000/ sz).ceil
+    wid = $gcols / tmp - d
   end
+  #elsif ars < sz * 2
+    #wid = $gcols/2 - d
+  #elsif ars < sz * 3
+    #wid = $gcols/3 - d
+  #else
+    #wid = $gcols/$gviscols - d
+  #end
 
   # ix refers to the index in the complete file list, wherease we only show 60 at a time
   ix=0
@@ -343,8 +361,8 @@ def format ary
     ## ctr refers to the index in the column
     #ind=$IDX[ix]
     ind = get_shortcut(ix)
-    mark="   "
-    mark=" x " if $selected_files.index(ary[ix])
+    mark="  "
+    mark="#{GMARK} " if $selected_files.index(ary[ix])
 
     if $long_listing
       begin
@@ -466,7 +484,9 @@ def change_dir f
   f = File.expand_path(f)
   Dir.chdir f
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  $sta = 0
   $patt=nil
+  screen_settings
 end
 
 ## clear sort order and refresh listing, used typically if you are in some view
@@ -479,6 +499,7 @@ end
 
 ## refresh listing after some change like option change, or toggle
 def refresh
+  # get tput cols and lines and recalc ROWS and pagesize TODO
     $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
     $patt=nil
 end
@@ -519,7 +540,7 @@ def goto_dir
   end
 
   open_file f
-  end
+end
 
 ## toggle mode to selection or not
 #  In selection, pressed hotkey selects a file without opening, one can keep selecting
@@ -605,7 +626,7 @@ def print_help
   puts
   ary = []
   $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
-  ary = columnate ary, ROWS - 7
+  ary = columnate ary, $grows - 7
   ary.each {|line| print line, "\n"  }
   get_char
 
@@ -653,12 +674,19 @@ def toggle_menu
     $ignorecase = !$ignorecase
     refresh
   when "toggle_columns"
-    x = ROWS * 3
-    $pagesize = $pagesize==x ? ROWS : x
+    $gviscols = 3 if $gviscols == 1
+    #$long_listing = false if $gviscols > 1 
+    x = $grows * $gviscols
+    $pagesize = $pagesize==x ? $grows : x
   when "toggle_long_list"
     $long_listing = !$long_listing
-    x = ROWS * 3
-    $pagesize = $pagesize==x ? ROWS : x
+    if $long_listing
+      $gviscols = 1
+      $pagesize = $grows
+    else
+      x = $grows * $gviscols
+      $pagesize = $pagesize==x ? $grows : x
+    end
     refresh
   end
 end
@@ -724,15 +752,36 @@ def command_menu
   end
 end
 def extras
-  h = { "1" => "one_column", "2" => "multi_column", "r" => "config_read" , "w" => "config_write"}
+  h = { "1" => "one_column", "2" => "multi_column", "c" => "columns", "r" => "config_read" , "w" => "config_write"}
   ch, menu_text = menu "Extras Menu", h
   case menu_text
   when "one_column"
-    $pagesize = ROWS
+    $pagesize = $grows
   when "multi_column"
     $pagesize = 60
-    $pagesize = ROWS * 3
-
+    $pagesize = $grows * $gviscols
+  when "columns"
+    print "How many columns would you like: 1-6 ?"
+    ch = get_char
+    ch = ch.to_i
+    if ch > 0 && ch < 7
+      $gviscols = ch.to_i
+      $pagesize = $grows * $gviscols
+    end
+  end
+end
+def filter_menu
+  h = { "d" => "dirs", "f" => "files", "e" => "empty dirs" , "0" => "empty files"}
+  ch, menu_text = menu "Filter Menu", h
+  case menu_text
+  when "dirs"
+    $files = `zsh -c 'print -rl -- *(#{$sorto}/M)'`.split("\n")
+  when "files"
+    $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.)'`.split("\n")
+  when "empty dirs"
+    $files = `zsh -c 'print -rl -- *(#{$sorto}/D^F)'`.split("\n")
+  when "empty files"
+    $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.L0)'`.split("\n")
   end
 end
 def select_used_dirs
@@ -848,7 +897,7 @@ def subcommand
     puts "Stored PWD in clipboard (using pbcopy)"
   end
 end
-def q_command
+def quit_command
   if $modified
     puts "Press w to save bookmarks before quitting " if $modified
     print "Press another q to quit "
@@ -889,54 +938,100 @@ def perror text
   puts "#{RED}#{text}#{CLEAR}"
   get_char
 end
-## use 2 more arrays to make this faster
+## return shortcut for an index (offset in file array)
+# use 2 more arrays to make this faster
 #  TODO key needs to convert back to actual index
 #  if z or x take another key if there are those many in view
 #  Also, display ROWS * COLS so now we are not limited to 60.
-def get_shortcut k
-  i = $IDX[k]
+def get_shortcut ix
+  return "<" if ix < $stact
+  ix -= $stact
+  i = $IDX[ix]
   return i if i
   sz = $IDX.size
-  dif = k - sz
+  dif = ix - sz
   if dif < 26
     dif += 97
     return "z#{dif.chr}"
   elsif dif < 52
     dif += 97 - 26
-    return "x#{dif.chr}"
-
+    return "Z#{dif.chr}"
+  elsif dif < 78
+    dif += 65 - 52
+    return "Z#{dif.chr}"
   end
-
+  return "->"
 end
-## returns the integer offset in view (file array based on a-y za-zz and xa - xz
+## returns the integer offset in view (file array based on a-y za-zz and Za - Zz
+# Called when user types a key
 #  should we even ask for a second key if there are not enough rows
 #  What if we want to also trap z with numbers for other purposes
-def get_index key, vsz
+def get_index key, vsz=999
   i = $IDX.index(key)
-  return i if i
+  return i+$stact if i
   sz = $IDX.size
   zch = nil
   if vsz > sz
     if key == "z"
+      print "z"
       zch = get_char
       if zch =~ /^[a-z]$/
         ko = sz + (zch.ord - 97)
-        return ko
+        return ko + $stact
         #key = "#{key}#{zch}"
       end
     end
   end
   if vsz > sz + 26
-    if key == "x"
+    if key == "Z"
+      print "Z"
       zch = get_char
       if zch =~ /^[a-z]$/
         ko = sz + 26 + (zch.ord - 97)
-        return ko
-        #key = "#{key}#{zch}"
+        return ko + $stact
+      elsif zch =~ /^[A-Z]$/
+        ko = sz + 52 + (zch.ord - "A".ord)
+        return ko + $stact
       end
     end
   end
   return nil
+end
+def delete_file
+  print "DELETE :: Enter file shortcut: "
+  file = ask_hint
+  perror "Cancelled" unless file
+  return unless file
+  if File.exists? file
+    pbold "rmtrash #{file}"
+    system "rmtrash #{file}"
+    refresh
+  end
+end
+def ask_hint
+  ch = get_char
+  ix = get_index(ch, $viewport.size)
+  f = $viewport[ix]
+  return f
+end
+def screen_settings
+  $glines=%x(tput lines).to_i
+  $gcols=%x(tput cols).to_i
+  $grows = $glines - 3
+  $pagesize = 60
+  #$gviscols = 3
+  $pagesize = $grows * $gviscols
+  $stact = 0
+end
+## moves column offset so we can reach unindexed columns or entries
+def column_next dir=0
+  if dir == 0
+    $stact += $grows
+    $stact = 0 if $stact >= $viewport.size
+  else
+    $stact -= $grows
+    $stact = 0 if $stact < 0
+  end
 end
 
 run if __FILE__ == $PROGRAM_NAME
