@@ -5,7 +5,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-02-28 01:49
+#  Last update: 2013-02-28 01:52
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 #  TODO - refresh should requery lines and cols and set pagesize
@@ -22,7 +22,7 @@ require 'fileutils'
 # copy into PATH
 # alias y=~/bin/cetus.rb
 # y
-VERSION="0.0.9-alpha"
+VERSION="0.0.10-alpha"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
