@@ -5,7 +5,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-02-27 15:05
+#  Last update: 2013-02-27 15:49
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 #  TODO - refresh should requery lines and cols and set pagesize
@@ -21,7 +21,7 @@ require 'shellwords'
 # copy into PATH
 # alias y=~/bin/cetus.rb
 # y
-VERSION="0.0.8-alpha"
+VERSION="0.0.9-alpha"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -158,7 +158,12 @@ def get_char
 end
 
 #$IDX="123456789abcdefghijklmnoprstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-$IDX="abcdefghijklmnopqrstuvwxy"
+#$IDX="abcdefghijklmnopqrstuvwxy"
+$IDX=('a'..'y').to_a
+$IDX.concat ('za'..'zz').to_a
+$IDX.concat ('Za'..'Zz').to_a
+$IDX.concat ('ZA'..'ZZ').to_a
+
 $selected_files = Array.new
 $bookmarks = {}
 $mode = nil
@@ -359,7 +364,6 @@ def format ary
   ctr=0
   ary.each do |f|
     ## ctr refers to the index in the column
-    #ind=$IDX[ix]
     ind = get_shortcut(ix)
     mark="  "
     mark="#{GMARK} " if $selected_files.index(ary[ix])
@@ -394,7 +398,6 @@ def select_hint view, ch
   # a to y is direct
   # if x or z take a key IF there are those many
   #
-  #ix = $IDX.index(ch)
   ix = get_index(ch, view.size)
   if ix
     f = view[ix]
@@ -948,18 +951,18 @@ def get_shortcut ix
   ix -= $stact
   i = $IDX[ix]
   return i if i
-  sz = $IDX.size
-  dif = ix - sz
-  if dif < 26
-    dif += 97
-    return "z#{dif.chr}"
-  elsif dif < 52
-    dif += 97 - 26
-    return "Z#{dif.chr}"
-  elsif dif < 78
-    dif += 65 - 52
-    return "Z#{dif.chr}"
-  end
+  #sz = $IDX.size
+  #dif = ix - sz
+  #if dif < 26
+    #dif += 97
+    #return "z#{dif.chr}"
+  #elsif dif < 52
+    #dif += 97 - 26
+    #return "Z#{dif.chr}"
+  #elsif dif < 78
+    #dif += 65 - 52
+    #return "Z#{dif.chr}"
+  #end
   return "->"
 end
 ## returns the integer offset in view (file array based on a-y za-zz and Za - Zz
@@ -969,8 +972,19 @@ end
 def get_index key, vsz=999
   i = $IDX.index(key)
   return i+$stact if i
-  sz = $IDX.size
+  #sz = $IDX.size
   zch = nil
+  if vsz > 25
+    if key == "z" || key == "Z"
+      print key
+      zch = get_char
+      print zch
+      i = $IDX.index("#{key}#{zch}")
+      return i+$stact if i
+    end
+  end
+  return nil
+
   if vsz > sz
     if key == "z"
       print "z"
