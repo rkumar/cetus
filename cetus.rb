@@ -2,14 +2,13 @@
 # ----------------------------------------------------------------------------- #
 #         File: cetus.rb
 #  Description: Fast file navigation, a tiny version of zfm
+#               but with a diffrent indexing mechanism
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-02-28 01:52
+#  Last update: 2013-02-28 20:38
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
-#  TODO - refresh should requery lines and cols and set pagesize
-#  let user decide how many cols he wants to see
 require 'readline'
 require 'io/wait'
 # http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
@@ -20,8 +19,8 @@ require 'fileutils'
 
 ## INSTALLATION
 # copy into PATH
-# alias y=~/bin/cetus.rb
-# y
+# alias c=~/bin/cetus.rb
+# c
 VERSION="0.0.10-alpha"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
@@ -63,6 +62,11 @@ $bindings = {
   "M-+"   => "columns_incdec 1",
   "S"     =>  "command_file list y ls -lh",
   "L"     =>  "command_file Page n less",
+  "C-d"   =>  "cursor_scroll_dn",
+  "C-b"   =>  "cursor_scroll_up",
+  "UP"   =>  "cursor_up",
+  "DOWN"   =>  "cursor_dn",
+  "C-SPACE" => "visual_mode_toggle",
 
   "M-?"   => "print_help",
   "F1"   => "print_help",
@@ -163,6 +167,7 @@ def get_char
   end
 end
 
+## GLOBALS
 #$IDX="123456789abcdefghijklmnoprstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 #$IDX="abcdefghijklmnopqrstuvwxy"
 $IDX=('a'..'y').to_a
@@ -180,7 +185,11 @@ $pagesize = 60
 $gviscols = 3
 $pagesize = $grows * $gviscols
 $stact = 0
+## CONSTANTS
 GMARK='*'
+CURMARK='>'
+MSCROLL = 10
+SPACE=" "
 CLEAR      = "\e[0m"
 BOLD       = "\e[1m"
 BOLD_OFF       = "\e[22m"
@@ -201,6 +210,8 @@ $used_dirs = []
 $sorto = nil
 $viewctr = 0
 $history = []
+$cursor = 0
+$visual_mode = false
 #$help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Command Mode  #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
 
 $help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}Q#{BOLD_OFF} Quit "
@@ -235,7 +246,8 @@ def run()
     # title
     print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
     print "#{BOLD}#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto}#{CLEAR}\n"
-    $title = nil
+    ## nilling the title means a superimposed one gets cleared.
+    #$title = nil
     # split into 2 procedures so columnate can e clean and reused.
     buff = format $viewport
     buff = columnate buff, $grows
@@ -371,8 +383,10 @@ def format ary
   ary.each do |f|
     ## ctr refers to the index in the column
     ind = get_shortcut(ix)
-    mark="  "
-    mark="#{GMARK} " if $selected_files.index(ary[ix])
+    mark=SPACE
+    cur=SPACE
+    cur = CURMARK if ix + $sta == $cursor
+    mark=GMARK if $selected_files.index(ary[ix])
 
     if $long_listing
       begin
@@ -390,7 +404,7 @@ def format ary
       end
     end
 
-    s = "#{ind}#{mark}#{f}"
+    s = "#{ind}#{mark}#{cur}#{f}"
 
     buff[ctr] = s
 
@@ -408,6 +422,8 @@ def select_hint view, ch
   if ix
     f = view[ix]
     return unless f
+    $cursor = $sta + ix
+
     if $mode == 'SEL'
       toggle_select f
     elsif $mode == 'COM'
@@ -429,6 +445,9 @@ end
 ## open file or directory
 def open_file f
   return unless f
+  if f[0] == "~"
+    f = File.expand_path(f)
+  end
   unless File.exist? f
     # this happens if we use (T) in place of (M) 
     # it places a space after normal files and @ and * which borks commands
@@ -494,9 +513,13 @@ def change_dir f
   f = File.expand_path(f)
   Dir.chdir f
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
-  $sta = 0
+  $sta = $cursor = 0
   $patt=nil
+  $title = nil
   screen_settings
+  if $selected_files.size > 0
+    perror "There are #{$selected_files.size} selected files in previous folder/s"
+  end
 end
 
 ## clear sort order and refresh listing, used typically if you are in some view
@@ -504,14 +527,15 @@ end
 def escape
   $sorto = nil
   $viewctr = 0
+  $title = nil
   refresh
 end
 
 ## refresh listing after some change like option change, or toggle
 def refresh
-  # get tput cols and lines and recalc ROWS and pagesize TODO
     $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
     $patt=nil
+    $title = nil
 end
 #
 ## unselect all files
@@ -557,16 +581,16 @@ end
 #  (or deselecting).
 #
 def selection_mode_toggle
-      if $mode == 'SEL'
-        # we seem to be coming out of select mode with some files
-        if $selected_files.size > 0
-          run_command $selected_files
-        end
-        $mode = nil
-      else
-        #$selection_mode = !$selection_mode
-        $mode = 'SEL'
-      end
+  if $mode == 'SEL'
+    # we seem to be coming out of select mode with some files
+    if $selected_files.size > 0
+      run_command $selected_files
+    end
+    $mode = nil
+  else
+    #$selection_mode = !$selection_mode
+    $mode = 'SEL'
+  end
 end
 ## toggle command mode
 def command_mode
@@ -579,6 +603,8 @@ end
 def goto_parent_dir
   change_dir ".."
 end
+## This actually filters, in zfm it goes to that entry since we have a cursor there
+#
 def goto_entry_starting_with fc=nil
   unless fc
     print "Entries starting with: "
@@ -614,9 +640,8 @@ end
 
 ## take regex from user, to run on files on screen, user can filter file names
 def enter_regex
-  print "Enter pattern: "
-  $patt = gets
-  $patt.chomp!
+  print "Enter (regex) pattern: "
+  $patt = gets().chomp
   ctr = 0
 end
 def next_page
@@ -650,9 +675,21 @@ def show_marks
   ch = get_char
   goto_bookmark(ch) if ch =~ /^[A-Z]$/
 end
-# MENU MAIN
+# MENU MAIN -- keep consistent with zfm
 def main_menu
-  h = { "s" => "sort_menu", "f" => "filter_menu", "c" => "command_menu" , "B" => "bindkey", "x" => "extras"}
+  h = { 
+    "a" => "ack",
+    "/" => "ffind",
+    "l" => "locate",
+    "|" => "pipe",
+    "v" => "viminfo",
+    "z" => "z_interface",
+    "s" => "sort_menu", 
+    "F" => "filter_menu",
+    "c" => "command_menu" ,
+    "B" => "bindkey_ext_command",
+    "x" => "extras"
+  }
   menu "Main Menu", h
 end
 def toggle_menu
@@ -730,6 +767,7 @@ def sort_menu
   $sorto = lo
   ## This needs to persist and be a part of all listings, put in change_dir.
   $files = `zsh -c 'print -rl -- *(#{lo}#{$hidden}M)'`.split("\n") if lo
+  $title = nil
   #$files =$(eval "print -rl -- ${pattern}(${MFM_LISTORDER}$filterstr)")
 end
 
@@ -744,23 +782,17 @@ def command_menu
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
   h = { "a" => "ack", "f" => "ffind", "l" => "locate", "t" => "today", "D" => "default_command" }
-  ## TODO use readline for these
   ch, menu_text = menu "Command Menu", h
   case menu_text
   when "ack"
-    print "Enter a pattern to search: "
-    pattern = gets.chomp
-    $files = `ack -l #{pattern}`.split("\n")
+    ack
   when "ffind"
-    print "Enter a pattern to find: "
-    pattern = gets.chomp
-    $files = `find . -name #{pattern}`.split("\n")
+    ffind
   when "locate"
-    print "Enter a pattern to locate: "
-    pattern = gets.chomp
-    $files = `locate #{pattern}`.split("\n")
+    locate
   when "today"
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
+    $title = "Today's files"
   when "default_command"
     print "Selecting a file usually invokes $EDITOR, what command do you want to use repeatedly on selected files: "
     $default_command = gets().chomp
@@ -835,6 +867,9 @@ def pop_dir
   Dir.chdir d
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
   $patt=nil
+  $cursor = 0
+  ## XXX should we not chaneg $sta to 0
+  $title = nil
 end
 #
 ## read dirs and files and bookmarks from file
@@ -940,9 +975,11 @@ def views
   $viewctr = 0 if $viewctr > views.size
 
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  $title = viewlabels[$viewctr]
 
 end
 def child_dirs
+  $title = "Child directories"
   $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
 end
 def select_first
@@ -967,26 +1004,13 @@ def pause text=" Press a key ..."
 end
 ## return shortcut for an index (offset in file array)
 # use 2 more arrays to make this faster
-#  TODO key needs to convert back to actual index
-#  if z or x take another key if there are those many in view
+#  if z or Z take another key if there are those many in view
 #  Also, display ROWS * COLS so now we are not limited to 60.
 def get_shortcut ix
   return "<" if ix < $stact
   ix -= $stact
   i = $IDX[ix]
   return i if i
-  #sz = $IDX.size
-  #dif = ix - sz
-  #if dif < 26
-    #dif += 97
-    #return "z#{dif.chr}"
-  #elsif dif < 52
-    #dif += 97 - 26
-    #return "Z#{dif.chr}"
-  #elsif dif < 78
-    #dif += 65 - 52
-    #return "Z#{dif.chr}"
-  #end
   return "->"
 end
 ## returns the integer offset in view (file array based on a-y za-zz and Za - Zz
@@ -1008,44 +1032,27 @@ def get_index key, vsz=999
     end
   end
   return nil
-
-  if vsz > sz
-    if key == "z"
-      print "z"
-      zch = get_char
-      if zch =~ /^[a-z]$/
-        ko = sz + (zch.ord - 97)
-        return ko + $stact
-        #key = "#{key}#{zch}"
-      end
-    end
-  end
-  if vsz > sz + 26
-    if key == "Z"
-      print "Z"
-      zch = get_char
-      if zch =~ /^[a-z]$/
-        ko = sz + 26 + (zch.ord - 97)
-        return ko + $stact
-      elsif zch =~ /^[A-Z]$/
-        ko = sz + 52 + (zch.ord - "A".ord)
-        return ko + $stact
-      end
-    end
-  end
-  return nil
 end
+
 def delete_file
   print "DELETE :: Enter file shortcut: "
   file = ask_hint
   perror "Cancelled" unless file
   return unless file
+  file = File.expand_path(file)
   if File.exists? file
     pbold "rmtrash #{file}"
     system "rmtrash #{file}"
     refresh
+  else
+    perror "File #{file} not found"
   end
 end
+
+## generic external command program
+#  prompt is the user friendly text of command such as list for ls, or extract for dtrx, page for less
+#  pauseyn is whether to pause after command as in file or ls
+#
 def command_file prompt, *command
   pauseyn = command.shift
   command = command.join " "
@@ -1053,14 +1060,20 @@ def command_file prompt, *command
   file = ask_hint
   perror "Command Cancelled" unless file
   return unless file
+  file = File.expand_path(file)
   if File.exists? file
     file = Shellwords.escape(file)
     pbold "#{command} #{file} (#{pauseyn})"
     system "#{command} #{file}"
     pause if pauseyn == "y"
     refresh
+  else
+    perror "File #{file} not found"
   end
 end
+
+## prompt user for file shortcut and return file or nil
+#
 def ask_hint
   f = nil
   ch = get_char
@@ -1068,6 +1081,9 @@ def ask_hint
   f = $viewport[ix] if ix
   return f
 end
+
+## check screen size and accordingly adjust some variables
+#
 def screen_settings
   $glines=%x(tput lines).to_i
   $gcols=%x(tput cols).to_i
@@ -1078,6 +1094,7 @@ def screen_settings
   $stact = 0
 end
 ## moves column offset so we can reach unindexed columns or entries
+# 0 forward and any other back/prev
 def column_next dir=0
   if dir == 0
     $stact += $grows
@@ -1147,6 +1164,10 @@ def file_actions
     refresh
     pause
   end
+  # remove non-existent files from select list due to move or delete or rename or whatever
+  if sct > 0
+    $selected_files.reject! {|x| x = File.expand_path(x); !File.exists?(x) }
+  end
 end
 def columns_incdec howmany
   $gviscols += howmany.to_i
@@ -1154,9 +1175,11 @@ def columns_incdec howmany
   $gviscols = 6 if $gviscols > 6
   $pagesize = $grows * $gviscols
 end
-def bindkey
+
+# bind a key to an external command wich can be then be used for files
+def bindkey_ext_command
   print 
-  pbold "Bind a capital letter to a external command"
+  pbold "Bind a capital letter to an external command"
   print "Enter a capital letter to bind: "
   ch = get_char
   return if ch == "Q"
@@ -1173,5 +1196,93 @@ def bindkey
     $bindings[ch] = "command_file #{pro} #{yn} #{com}"
   end
 end
+def ack
+  print "Enter a pattern to search (ack): "
+  #pattern = gets.chomp
+  pattern = Readline::readline('>', true)
+  $title = "Files found using 'ack' #{pattern}"
+  system("ack #{pattern}")
+  pause
+  $files = `ack -l #{pattern}`.split("\n")
+end
+def ffind
+  print "Enter a file name pattern to find: "
+  pattern = Readline::readline('>', true)
+  $title = "Files found using 'find' #{pattern}"
+  $files = `find . -name '#{pattern}'`.split("\n")
+end
+def locate
+  print "Enter a file name pattern to locate: "
+  pattern = Readline::readline('>', true)
+  $title = "Files found using 'locate' #{pattern}"
+  $files = `locate #{pattern}`.split("\n")
+end
 
+## Displays files from .viminfo file, if you use some other editor which tracks files opened
+#  then you can modify this accordingly.
+#
+def viminfo
+  file = File.expand_path("~/.viminfo")
+  if File.exists? file
+    $title = "Files from ~/.viminfo"
+    #$files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- | sed "s#~#$HOME#g"`.split("\n")
+    $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- `.split("\n")
+    $files.reject! {|x| x = File.expand_path(x); !File.exists?(x) }
+  end
+end
+
+##  takes directories from the z program, if you use autojump you can
+#   modify this accordingly
+#
+def z_interface
+  file = File.expand_path("~/.z")
+  if File.exists? file
+    $title = "Directories from ~/.z"
+    $files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
+  end
+end
+
+## there is no one consisten way i am getting.
+#  i need to do a shell join if I am to pipe ffiles to say: xargs ls -t
+#  but if i want to pipe names to grep xxx then i need to join with newlines
+def pipe
+  #print "Enter pipe to filter existing files through: "
+  #pipe = gets().chomp
+  #if pipe != ""
+  #end
+end
+def cursor_scroll_dn
+  moveto(pos() + MSCROLL)
+  #$cursor += MSCROLL
+  #$cursor = [$cursor, $view.size - 1].min
+end
+def cursor_scroll_up
+  moveto(pos() - MSCROLL)
+  #$cursor -= MSCROLL
+  #$cursor = [$cursor, 0].max
+end
+def cursor_dn
+  moveto(pos() + 1)
+end
+def cursor_up
+  moveto(pos() - 1)
+end
+def pos
+  $cursor
+end
+
+def moveto pos
+  orig = $cursor
+  $cursor = pos
+  $cursor = [$cursor, $view.size - 1].min
+  $cursor = [$cursor, 0].max
+  star = [orig, $cursor].min
+  fin = [orig, $cursor].max
+  if $visual_mode
+    $selected_files.concat $view[star..fin]
+  end
+end
+def visual_mode_toggle
+  $visual_mode = !$visual_mode
+end
 run if __FILE__ == $PROGRAM_NAME
