@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-02-28 20:38
+#  Last update: 2013-03-01 01:58
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -54,6 +54,7 @@ $bindings = {
   "?"   => "child_dirs",
   "ENTER"   => "select_first",
   "D"   => "delete_file",
+  "M"   => "file_actions s",
   "Q"   => "quit_command",
   "RIGHT"   => "column_next",
   "LEFT"   => "column_next 1",
@@ -185,6 +186,7 @@ $pagesize = 60
 $gviscols = 3
 $pagesize = $grows * $gviscols
 $stact = 0
+$editor_mode = true
 ## CONSTANTS
 GMARK='*'
 CURMARK='>'
@@ -681,7 +683,6 @@ def main_menu
     "a" => "ack",
     "/" => "ffind",
     "l" => "locate",
-    "|" => "pipe",
     "v" => "viminfo",
     "z" => "z_interface",
     "s" => "sort_menu", 
@@ -700,7 +701,7 @@ def menu title, h
   return unless h
 
   pbold "#{title}"
-  h.each_pair { |k, v| puts "#{k}: #{v}" }
+  h.each_pair { |k, v| puts " #{k}: #{v}" }
   ch = get_char
   binding = h[ch]
   if binding
@@ -781,11 +782,20 @@ def command_menu
   # should be able to sort THIS listing and not rerun command. But for that I'd need to use
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
-  h = { "a" => "ack", "f" => "ffind", "l" => "locate", "t" => "today", "D" => "default_command" }
+  h = { "t" => "today", "D" => "default_command" }
+  if $editor_mode 
+    h["e"] = "pager_mode"
+  else
+    h["e"] = "editor_mode"
+  end
   ch, menu_text = menu "Command Menu", h
   case menu_text
-  when "ack"
-    ack
+  when "pager_mode"
+    $editor_mode = false
+    $default_command = ENV['MANPAGER'] || ENV['PAGER']
+  when "editor_mode"
+    $editor_mode = true
+    $default_command = nil
   when "ffind"
     ffind
   when "locate"
@@ -1035,6 +1045,8 @@ def get_index key, vsz=999
 end
 
 def delete_file
+  file_actions "d"
+  return
   print "DELETE :: Enter file shortcut: "
   file = ask_hint
   perror "Cancelled" unless file
@@ -1104,14 +1116,19 @@ def column_next dir=0
     $stact = 0 if $stact < 0
   end
 end
-def file_actions
+# currently i am only passing the action in from the list there as a key
+# I should be able to pass in new actions that are external commands
+def file_actions action=nil
+  h = { "d" => "delete", "m" => "move", "r" => "rename", "v" => ENV["EDITOR"] || "vim",
+    "l" => "less", "s" => "most" , "f" => "file" , "o" => "open", "x" => "dtrx", "z" => "zip" }
+  acttext = h[action]
   sct = $selected_files.size
   file = nil
   if sct > 0
     text = "#{sct} files"
     file = $selected_files
   else
-    print "Choose a file: "
+    print "#{acttext}. Choose a file: "
     file = ask_hint
     return unless file
     text = file
@@ -1123,13 +1140,23 @@ def file_actions
   when String
     files = Shellwords.escape(file)
   end
-  h = { "d" => "delete", "m" => "move", "r" => "rename", "v" => ENV["EDITOR"] || "vim",
-    "l" => "less", "s" => "most" , "f" => "file" , "o" => "open", "x" => "dtrx", "z" => "zip" }
-  ch, menu_text = menu "File Menu for #{text}", h
+  ch = nil
+  if action
+    if h[action]
+      ch = action 
+      menu_text = h[action]
+    end
+    unless ch
+      perror "Action not found #{action}"
+      return
+    end
+  else
+    ch, menu_text = menu "File Menu for #{text}", h
+  end
   case ch
   when "q"
   when "d"
-    print "rmtrash #{files}"
+    print "rmtrash #{files} ?: "
     ch = get_char
     return if ch == "n"
     system "rmtrash #{files}"
@@ -1137,9 +1164,13 @@ def file_actions
   when "m"
     print "move #{text} to : "
     target = gets().chomp
-    if target
-      FileUtils.mv text, target
-      refresh
+    if target.size > 2
+      if File.directory? target
+        FileUtils.mv text, target
+        refresh
+      else
+        perror "Target not a dir"
+      end
     else
       perror "Cancelled move"
     end
@@ -1155,6 +1186,9 @@ def file_actions
         refresh
       end
     end
+  when "r"
+  when "s"
+    system "#{menu_text} #{files}"
   else
     return unless menu_text
     print "#{menu_text} #{files}"
@@ -1279,10 +1313,19 @@ def moveto pos
   star = [orig, $cursor].min
   fin = [orig, $cursor].max
   if $visual_mode
-    $selected_files.concat $view[star..fin]
+    # PWD has to be there in selction
+    if $selected_files.index $view[$cursor]
+      # this depends on the direction XXX
+      $selected_files = $selected_files - $view[star..fin]
+    else
+      $selected_files.concat $view[star..fin]
+    end
   end
 end
 def visual_mode_toggle
   $visual_mode = !$visual_mode
+  if $visual_mode
+    $selected_files.push $view[$cursor]
+  end
 end
 run if __FILE__ == $PROGRAM_NAME
