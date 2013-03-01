@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-01 01:58
+#  Last update: 2013-03-01 19:30
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -21,7 +21,7 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.0.10-alpha"
+VERSION="0.1.0"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -54,7 +54,7 @@ $bindings = {
   "?"   => "child_dirs",
   "ENTER"   => "select_first",
   "D"   => "delete_file",
-  "M"   => "file_actions s",
+  "M"   => "file_actions most",
   "Q"   => "quit_command",
   "RIGHT"   => "column_next",
   "LEFT"   => "column_next 1",
@@ -187,6 +187,7 @@ $gviscols = 3
 $pagesize = $grows * $gviscols
 $stact = 0
 $editor_mode = true
+$visual_block_start = nil
 ## CONSTANTS
 GMARK='*'
 CURMARK='>'
@@ -515,13 +516,7 @@ def change_dir f
   f = File.expand_path(f)
   Dir.chdir f
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
-  $sta = $cursor = 0
-  $patt=nil
-  $title = nil
-  screen_settings
-  if $selected_files.size > 0
-    perror "There are #{$selected_files.size} selected files in previous folder/s"
-  end
+  post_cd
 end
 
 ## clear sort order and refresh listing, used typically if you are in some view
@@ -530,6 +525,7 @@ def escape
   $sorto = nil
   $viewctr = 0
   $title = nil
+  visual_block_clear
   refresh
 end
 
@@ -613,8 +609,9 @@ def goto_entry_starting_with fc=nil
     fc = get_char
   end
   return if fc.size != 1
+  ## this is wrong and duplicates the functionality of /
+  #  It shoud go to cursor of item starting with fc
   $patt = "^#{fc}"
-  ctr = 0
 end
 def goto_bookmark ch=nil
   unless ch
@@ -635,7 +632,8 @@ def goto_bookmark ch=nil
       perror "#{ch} not a bookmark"
     end
   else
-    goto_entry_starting_with ch
+    #goto_entry_starting_with ch
+    file_starting_with ch
   end
 end
 
@@ -680,21 +678,22 @@ end
 # MENU MAIN -- keep consistent with zfm
 def main_menu
   h = { 
-    "a" => "ack",
-    "/" => "ffind",
-    "l" => "locate",
-    "v" => "viminfo",
-    "z" => "z_interface",
-    "s" => "sort_menu", 
-    "F" => "filter_menu",
-    "c" => "command_menu" ,
-    "B" => "bindkey_ext_command",
-    "x" => "extras"
+    :a => :ack,
+    "/" => :ffind,
+    :l => :locate,
+    :v => :viminfo,
+    :z => :z_interface,
+    :d => :child_dirs,
+    :s => :sort_menu, 
+    :F => :filter_menu,
+    :c => :command_menu ,
+    :B => :bindkey_ext_command,
+    :x => :extras
   }
   menu "Main Menu", h
 end
 def toggle_menu
-  h = { "h" => "toggle_hidden", "c" => "toggle_case", "l" => "toggle_long_list" , "1" => "toggle_columns"}
+  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns}
   menu "Toggle Menu", h
 end
 def menu title, h
@@ -704,6 +703,7 @@ def menu title, h
   h.each_pair { |k, v| puts " #{k}: #{v}" }
   ch = get_char
   binding = h[ch]
+  binding = h[ch.to_sym] unless binding
   if binding
     if respond_to?(binding, true)
       send(binding)
@@ -712,7 +712,7 @@ def menu title, h
   return ch, binding
 end
 def toggle_menu
-  h = { "h" => "toggle_hidden", "c" => "toggle_case", "l" => "toggle_long_list" , "1" => "toggle_columns"}
+  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns}
   ch, menu_text = menu "Toggle Menu", h
   case menu_text
   when "toggle_hidden"
@@ -742,27 +742,27 @@ end
 
 def sort_menu
   lo = nil
-  h = { "n" => "newest", "a" => "accessed", "o" => "oldest", 
-    "l" => "largest", "s" => "smallest" , "m" => "name" , "r" => "rname", "d" => "dirs", "c" => "clear" }
+  h = { :n => :newest, :a => :accessed, :o => :oldest, 
+    :l => :largest, :s => :smallest , :m => :name , :r => :rname, :d => :dirs, :c => :clear }
   ch, menu_text = menu "Sort Menu", h
   case menu_text
-  when "newest"
+  when :newest
     lo="om"
-  when "accessed"
+  when :accessed
     lo="oa"
-  when "oldest"
+  when :oldest
     lo="Om"
-  when "largest"
+  when :largest
     lo="OL"
-  when "smallest"
+  when :smallest
     lo="oL"
-  when "name"
+  when :name
     lo="on"
-  when "rname"
+  when :rname
     lo="On"
-  when "dirs"
+  when :dirs
     lo="/"
-  when "clear"
+  when :clear
     lo=""
   end
   $sorto = lo
@@ -782,28 +782,28 @@ def command_menu
   # should be able to sort THIS listing and not rerun command. But for that I'd need to use
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
-  h = { "t" => "today", "D" => "default_command" }
+  h = { :t => :today, :D => :default_command }
   if $editor_mode 
-    h["e"] = "pager_mode"
+    h[:e] = :pager_mode
   else
-    h["e"] = "editor_mode"
+    h[:e] = :editor_mode
   end
   ch, menu_text = menu "Command Menu", h
   case menu_text
-  when "pager_mode"
+  when :pager_mode
     $editor_mode = false
     $default_command = ENV['MANPAGER'] || ENV['PAGER']
-  when "editor_mode"
+  when :editor_mode
     $editor_mode = true
     $default_command = nil
-  when "ffind"
+  when :ffind
     ffind
-  when "locate"
+  when :locate
     locate
-  when "today"
+  when :today
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
     $title = "Today's files"
-  when "default_command"
+  when :default_command
     print "Selecting a file usually invokes $EDITOR, what command do you want to use repeatedly on selected files: "
     $default_command = gets().chomp
     if $default_command != ""
@@ -817,15 +817,15 @@ def command_menu
   end
 end
 def extras
-  h = { "1" => "one_column", "2" => "multi_column", "c" => "columns", "r" => "config_read" , "w" => "config_write"}
+  h = { "1" => :one_column, "2" => :multi_column, :c => :columns, :r => :config_read , :w => :config_write}
   ch, menu_text = menu "Extras Menu", h
   case menu_text
-  when "one_column"
+  when :one_column
     $pagesize = $grows
-  when "multi_column"
+  when :multi_column
     #$pagesize = 60
     $pagesize = $grows * $gviscols
-  when "columns"
+  when :columns
     print "How many columns to show: 1-6 [current #{$gviscols}]? "
     ch = get_char
     ch = ch.to_i
@@ -836,16 +836,16 @@ def extras
   end
 end
 def filter_menu
-  h = { "d" => "dirs", "f" => "files", "e" => "empty dirs" , "0" => "empty files"}
+  h = { :d => :dirs, :f => :files, :e => :emptydirs , "0" => :emptyfiles}
   ch, menu_text = menu "Filter Menu", h
   case menu_text
-  when "dirs"
+  when :dirs
     $files = `zsh -c 'print -rl -- *(#{$sorto}/M)'`.split("\n")
-  when "files"
+  when :files
     $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.)'`.split("\n")
-  when "empty dirs"
+  when :emptydirs
     $files = `zsh -c 'print -rl -- *(#{$sorto}/D^F)'`.split("\n")
-  when "empty files"
+  when :emptyfiles
     $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.L0)'`.split("\n")
   end
 end
@@ -876,10 +876,16 @@ def pop_dir
   $visited_dirs.push d
   Dir.chdir d
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  post_cd
+end
+def post_cd
   $patt=nil
-  $cursor = 0
-  ## XXX should we not chaneg $sta to 0
+  $sta = $cursor = 0
   $title = nil
+  if $selected_files.size > 0
+    $selected_files = []
+  end
+  $visual_block_start = nil
 end
 #
 ## read dirs and files and bookmarks from file
@@ -1045,20 +1051,7 @@ def get_index key, vsz=999
 end
 
 def delete_file
-  file_actions "d"
-  return
-  print "DELETE :: Enter file shortcut: "
-  file = ask_hint
-  perror "Cancelled" unless file
-  return unless file
-  file = File.expand_path(file)
-  if File.exists? file
-    pbold "rmtrash #{file}"
-    system "rmtrash #{file}"
-    refresh
-  else
-    perror "File #{file} not found"
-  end
+  file_actions :delete
 end
 
 ## generic external command program
@@ -1119,20 +1112,23 @@ end
 # currently i am only passing the action in from the list there as a key
 # I should be able to pass in new actions that are external commands
 def file_actions action=nil
-  h = { "d" => "delete", "m" => "move", "r" => "rename", "v" => ENV["EDITOR"] || "vim",
-    "l" => "less", "s" => "most" , "f" => "file" , "o" => "open", "x" => "dtrx", "z" => "zip" }
-  acttext = h[action]
-  sct = $selected_files.size
+  h = { :d => :delete, :m => :move, :r => :rename, :v => ENV["EDITOR"] || :vim,
+    :l => :less, :s => :most , :f => :file , :o => :open, :x => :dtrx, :z => :zip }
+  #acttext = h[action.to_sym] || action
+  acttext = action || ""
   file = nil
+
+  sct = $selected_files.size
   if sct > 0
     text = "#{sct} files"
     file = $selected_files
   else
-    print "#{acttext}. Choose a file: "
+    print "[#{acttext}] Choose a file: "
     file = ask_hint
     return unless file
     text = file
   end
+
   case file
   when Array
     # escape the contents and create a string
@@ -1140,28 +1136,24 @@ def file_actions action=nil
   when String
     files = Shellwords.escape(file)
   end
+
+
   ch = nil
   if action
-    if h[action]
-      ch = action 
-      menu_text = h[action]
-    end
-    unless ch
-      perror "Action not found #{action}"
-      return
-    end
+      menu_text = action
   else
     ch, menu_text = menu "File Menu for #{text}", h
+    menu_text = :quit if ch == "q"
   end
-  case ch
-  when "q"
-  when "d"
+  case menu_text.to_sym
+  when :quit
+  when :delete
     print "rmtrash #{files} ?: "
     ch = get_char
     return if ch == "n"
     system "rmtrash #{files}"
     refresh
-  when "m"
+  when :move
     print "move #{text} to : "
     target = gets().chomp
     if target.size > 2
@@ -1174,7 +1166,7 @@ def file_actions action=nil
     else
       perror "Cancelled move"
     end
-  when "z"
+  when :zip
     print "Archive name: "
     target = gets().chomp
     # don't want a blank space or something screwing up
@@ -1186,8 +1178,8 @@ def file_actions action=nil
         refresh
       end
     end
-  when "r"
-  when "s"
+  when :rename
+  when :most, :less, :vim
     system "#{menu_text} #{files}"
   else
     return unless menu_text
@@ -1203,6 +1195,7 @@ def file_actions action=nil
     $selected_files.reject! {|x| x = File.expand_path(x); !File.exists?(x) }
   end
 end
+
 def columns_incdec howmany
   $gviscols += howmany.to_i
   $gviscols = 1 if $gviscols < 1
@@ -1234,22 +1227,40 @@ def ack
   print "Enter a pattern to search (ack): "
   #pattern = gets.chomp
   pattern = Readline::readline('>', true)
+  return if pattern == ""
   $title = "Files found using 'ack' #{pattern}"
   system("ack #{pattern}")
   pause
-  $files = `ack -l #{pattern}`.split("\n")
+  files = `ack -l #{pattern}`.split("\n")
+  if files.size == 0
+    perror "No files found."
+  else
+    $files = files
+  end
 end
 def ffind
   print "Enter a file name pattern to find: "
   pattern = Readline::readline('>', true)
+  return if pattern == ""
   $title = "Files found using 'find' #{pattern}"
-  $files = `find . -name '#{pattern}'`.split("\n")
+  files = `find . -name '#{pattern}'`.split("\n")
+  if files.size == 0
+    perror "No files found."
+  else
+    $files = files
+  end
 end
 def locate
   print "Enter a file name pattern to locate: "
   pattern = Readline::readline('>', true)
+  return if pattern == ""
   $title = "Files found using 'locate' #{pattern}"
-  $files = `locate #{pattern}`.split("\n")
+  files = `locate #{pattern}`.split("\n")
+  if files.size == 0
+    perror "No files found."
+  else
+    $files = files
+  end
 end
 
 ## Displays files from .viminfo file, if you use some other editor which tracks files opened
@@ -1315,8 +1326,10 @@ def moveto pos
   if $visual_mode
     # PWD has to be there in selction
     if $selected_files.index $view[$cursor]
-      # this depends on the direction XXX
+      # this depends on the direction 
       $selected_files = $selected_files - $view[star..fin]
+      ## current row remains in selection always.
+      $selected_files.push $view[$cursor]
     else
       $selected_files.concat $view[star..fin]
     end
@@ -1325,7 +1338,50 @@ end
 def visual_mode_toggle
   $visual_mode = !$visual_mode
   if $visual_mode
+    $visual_block_start = $cursor
     $selected_files.push $view[$cursor]
   end
+end
+def visual_block_clear
+  if $visual_block_start
+    star = [$visual_block_start, $cursor].min
+    fin = [$visual_block_start, $cursor].max
+    $selected_files = $selected_files - $view[star..fin]
+  end
+  $visual_block_start = nil
+  $visual_mode = nil
+end
+def file_starting_with fc
+  ix = return_next_match(method(:file_matching?), "^#{fc}")
+  if ix
+    goto_line ix
+  end
+end
+def file_matching? file, patt
+  file =~ /#{patt}/
+end
+def return_next_match binding, *args
+  first = nil
+  ix = 0
+  $view.each_with_index do |elem,ii|
+    if binding.call(elem, *args)
+      first ||= ii
+      if ii > $cursor 
+        ix = ii
+        break
+      end
+    end
+  end
+  return first if ix == 0
+  return ix
+end
+##
+# position cursor on a specific line which could be on a nother page
+# therefore calculate the correct start offset of the display also.
+def goto_line pos
+  pages = ((pos * 1.00)/$pagesize).ceil
+  pages -= 1
+  $sta = pages * $pagesize + 1
+  $cursor = pos
 end
 run if __FILE__ == $PROGRAM_NAME
