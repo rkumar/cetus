@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-01 19:30
+#  Last update: 2013-03-01 20:15
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -248,7 +248,7 @@ def run()
     system("clear")
     # title
     print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
-    print "#{BOLD}#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto}#{CLEAR}\n"
+    print "#{BOLD}#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}#{CLEAR}\n"
     ## nilling the title means a superimposed one gets cleared.
     #$title = nil
     # split into 2 procedures so columnate can e clean and reused.
@@ -515,7 +515,8 @@ def change_dir f
   $visited_dirs.insert(0, Dir.pwd)
   f = File.expand_path(f)
   Dir.chdir f
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  $filterstr ||= "M"
+  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   post_cd
 end
 
@@ -525,13 +526,15 @@ def escape
   $sorto = nil
   $viewctr = 0
   $title = nil
+  $filterstr = "M"
   visual_block_clear
   refresh
 end
 
 ## refresh listing after some change like option change, or toggle
 def refresh
-    $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+    $filterstr ||= "M"
+    $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
     $patt=nil
     $title = nil
 end
@@ -715,19 +718,19 @@ def toggle_menu
   h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns}
   ch, menu_text = menu "Toggle Menu", h
   case menu_text
-  when "toggle_hidden"
+  when :toggle_hidden
     $hidden = $hidden ? nil : "D"
     refresh
-  when "toggle_case"
+  when :toggle_case
     #$ignorecase = $ignorecase ? "" : "i"
     $ignorecase = !$ignorecase
     refresh
-  when "toggle_columns"
+  when :toggle_columns
     $gviscols = 3 if $gviscols == 1
     #$long_listing = false if $gviscols > 1 
     x = $grows * $gviscols
     $pagesize = $pagesize==x ? $grows : x
-  when "toggle_long_list"
+  when :toggle_long_list
     $long_listing = !$long_listing
     if $long_listing
       $gviscols = 1
@@ -765,8 +768,8 @@ def sort_menu
   when :clear
     lo=""
   end
-  $sorto = lo
   ## This needs to persist and be a part of all listings, put in change_dir.
+  $sorto = lo
   $files = `zsh -c 'print -rl -- *(#{lo}#{$hidden}M)'`.split("\n") if lo
   $title = nil
   #$files =$(eval "print -rl -- ${pattern}(${MFM_LISTORDER}$filterstr)")
@@ -838,15 +841,28 @@ end
 def filter_menu
   h = { :d => :dirs, :f => :files, :e => :emptydirs , "0" => :emptyfiles}
   ch, menu_text = menu "Filter Menu", h
+  files = nil
   case menu_text
   when :dirs
-    $files = `zsh -c 'print -rl -- *(#{$sorto}/M)'`.split("\n")
+    $filterstr = "/M"
+    files = `zsh -c 'print -rl -- *(#{$sorto}/M)'`.split("\n")
+    $title = "Filter: directories only"
   when :files
-    $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.)'`.split("\n")
+    $filterstr = "."
+    files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.)'`.split("\n")
+    $title = "Filter: files only"
   when :emptydirs
-    $files = `zsh -c 'print -rl -- *(#{$sorto}/D^F)'`.split("\n")
+    $filterstr = "/D^F"
+    files = `zsh -c 'print -rl -- *(#{$sorto}/D^F)'`.split("\n")
+    $title = "Filter: empty directories"
   when :emptyfiles
-    $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.L0)'`.split("\n")
+    $filterstr = ".L0"
+    files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.L0)'`.split("\n")
+    $title = "Filter: empty files"
+  end
+  if files
+    $files = files
+    $stact = 0
   end
 end
 def select_used_dirs
@@ -875,7 +891,8 @@ def pop_dir
   ## XXX make sure the dir exists, cuold have been deleted. can be an error or crash otherwise
   $visited_dirs.push d
   Dir.chdir d
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  $filterstr ||= "M"
+  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   post_cd
 end
 def post_cd
