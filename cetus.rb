@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-02 18:02
+#  Last update: 2013-03-02 19:17
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -204,10 +204,14 @@ CLEAR      = "\e[0m"
 BOLD       = "\e[1m"
 BOLD_OFF       = "\e[22m"
 RED        = "\e[31m"
+ON_RED        = "\e[41m"
 GREEN      = "\e[32m"
 YELLOW     = "\e[33m"
 BLUE       = "\e[34m"
+
+ON_BLUE    = "\e[44m"
 REVERSE    = "\e[7m"
+CURSOR_COLOR = ON_BLUE
 $patt=nil
 $ignorecase = true
 $quitting = false
@@ -358,10 +362,20 @@ def columnate ary, sz
     while ctr < sz
 
       f = ary[ix]
-      if f.size > wid
+      fsz = f.size
+      if fsz > wid
         f = f[0, wid-2]+"$ "
+        ## we do the coloring after trunc so ANSI escpe seq does not get get
+        if ix + $sta == $cursor
+          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+        end
       else
-        f = f.ljust(wid)
+        ## we do the coloring before padding so the entire line does not get padded, only file name
+        if ix + $sta == $cursor
+          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+        end
+        #f = f.ljust(wid)
+        f << " " * (wid-fsz)
       end
 
       if buff[ctr]
@@ -415,6 +429,12 @@ def format ary
     end
 
     s = "#{ind}#{mark}#{cur}#{f}"
+    # I cannot color the current line since format does the chopping
+    # so not only does the next lines alignment get skeweed, but also if the line is truncated
+    # then the color overflows.
+    #if ix + $sta == $cursor
+      #s = "#{RED}#{s}#{CLEAR}"
+    #end
 
     buff[ctr] = s
 
@@ -466,9 +486,13 @@ def open_file f
       f = f.chop
     end
   end
+  nextpos = nil
+  if f.index(":")
+    f, nextpos = f.split(":")
+  end
   if File.directory? f
     save_dir_pos
-    change_dir f
+    change_dir f, nextpos
   elsif File.readable? f
     $default_command ||= "$EDITOR"
     if !$editor_mode
@@ -536,13 +560,17 @@ def run_command f
   get_char
 end
 
-def change_dir f
+def change_dir f, pos=nil
   $visited_dirs.insert(0, Dir.pwd)
   f = File.expand_path(f)
   Dir.chdir f
   $filterstr ||= "M"
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   post_cd
+  if pos
+    # convert curpos to sta also
+    $cursor = pos.to_i
+  end
 end
 
 ## clear sort order and refresh listing, used typically if you are in some view
@@ -650,12 +678,14 @@ def goto_bookmark ch=nil
     d = $bookmarks[ch]
     # this is if we use zfm's bookmarks which have a position
     # this way we leave the position as is, so it gets written back
+    nextpos = nil
     if d
       if d.index(":")
         ix = d.index(":")
+        nextpos = d[ix+1..-1]
         d = d[0,ix]
       end
-      change_dir d
+      change_dir d, nextpos
     else
       perror "#{ch} not a bookmark"
     end
