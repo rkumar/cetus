@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-02 15:21
+#  Last update: 2013-03-02 18:02
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -194,6 +194,7 @@ $pager_command = {
   :zip => 'tar ztvf %% | most',
   :unknown => 'open'
 }
+$dir_position = {}
 ## CONSTANTS
 GMARK='*'
 CURMARK='>'
@@ -219,7 +220,7 @@ $used_dirs = []
 $sorto = nil
 $viewctr = 0
 $history = []
-$cursor = 0
+$sta = $cursor = 0
 $visual_mode = false
 #$help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Command Mode  #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
 
@@ -466,6 +467,7 @@ def open_file f
     end
   end
   if File.directory? f
+    save_dir_pos
     change_dir f
   elsif File.readable? f
     $default_command ||= "$EDITOR"
@@ -926,6 +928,7 @@ def post_cd
     $selected_files = []
   end
   $visual_block_start = nil
+  revert_dir_pos
 end
 #
 ## read dirs and files and bookmarks from file
@@ -1192,9 +1195,9 @@ def file_actions action=nil
   case menu_text.to_sym
   when :quit
   when :delete
-    print "rmtrash #{files} ?: "
+    print "rmtrash #{files} ?[yn]: "
     ch = get_char
-    return if ch == "n"
+    return if ch != "y"
     system "rmtrash #{files}"
     refresh
   when :move
@@ -1440,5 +1443,21 @@ def filetype f
     return :text
   end
   nil
+end
+
+def save_dir_pos 
+  return if $sta == 0 && $cursor == 0
+  $dir_position[Dir.pwd] = [$sta, $cursor]
+end
+def revert_dir_pos
+  $sta = 0
+  $cursor = 0
+  a = $dir_position[Dir.pwd]
+  if a
+    $sta = a.first
+    $cursor = a[1]
+    raise "sta is nil for #{Dir.pwd} : #{$dir_position[Dir.pwd]}" unless $sta
+    raise "cursor is nil" unless $cursor
+  end
 end
 run if __FILE__ == $PROGRAM_NAME
