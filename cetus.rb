@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-02 19:17
+#  Last update: 2013-03-02 20:08
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -21,7 +21,7 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.1.1-a"
+VERSION="0.1.1-b"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -560,6 +560,7 @@ def run_command f
   get_char
 end
 
+## cd to a dir
 def change_dir f, pos=nil
   $visited_dirs.insert(0, Dir.pwd)
   f = File.expand_path(f)
@@ -569,7 +570,8 @@ def change_dir f, pos=nil
   post_cd
   if pos
     # convert curpos to sta also
-    $cursor = pos.to_i
+    #$cursor = pos.to_i
+    goto_line pos.to_i
   end
 end
 
@@ -1004,7 +1006,7 @@ def create_bookmark
   print "Enter (upper case) char for bookmark: "
   ch = get_char
   if ch =~ /^[A-Z]$/
-    $bookmarks[ch] = Dir.pwd
+    $bookmarks[ch] = "#{Dir.pwd}:#{$cursor}"
     $modified = true
   else
     perror "Bookmark must be upper-case character"
