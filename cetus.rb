@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-01 20:15
+#  Last update: 2013-03-02 15:02
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -188,6 +188,12 @@ $pagesize = $grows * $gviscols
 $stact = 0
 $editor_mode = true
 $visual_block_start = nil
+$pager_command = {
+  :text => 'most',
+  :image => 'open',
+  :zip => 'tar ztvf %% | most',
+  :unknown => 'open'
+}
 ## CONSTANTS
 GMARK='*'
 CURMARK='>'
@@ -463,7 +469,24 @@ def open_file f
     change_dir f
   elsif File.readable? f
     $default_command ||= "$EDITOR"
-    system("#{$default_command} #{Shellwords.escape(f)} #{$default_command2}")
+    if !$editor_mode
+      ft = filetype f
+      if ft
+        comm = $pager_command[ft]
+      else
+        comm = $pager_command[File.extname(f)]
+        comm = $pager_command["unknown"] unless comm
+      end
+    else
+      comm = $default_command
+    end
+    comm ||= $default_command
+    if comm.index("%%")
+      comm = comm.gsub("%%", Shellwords.escape(f))
+    else
+      comm = comm + " #{Shellwords.escape(f)}"
+    end
+    system("#{comm}")
     f = Dir.pwd + "/" + f if f[0] != '/'
     $visited_files.insert(0, f)
     push_used_dirs Dir.pwd
@@ -1400,5 +1423,22 @@ def goto_line pos
   pages -= 1
   $sta = pages * $pagesize + 1
   $cursor = pos
+end
+def filetype f
+  return nil unless f
+  f = Shellwords.escape(f)
+  s = `file #{f}`
+  if s.index "text"
+    return :text
+  elsif s.index(/[Zz]ip/)
+    return :zip
+  elsif s.index("archive")
+    return :zip
+  elsif s.index "image"
+    return :image
+  elsif s.index "data"
+    return :text
+  end
+  nil
 end
 run if __FILE__ == $PROGRAM_NAME
