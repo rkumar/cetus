@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-02 15:02
+#  Last update: 2013-03-02 15:21
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -21,7 +21,7 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.1.0"
+VERSION="0.1.1-a"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -52,7 +52,7 @@ $bindings = {
   "TAB"   => "views",
   "C-i"   => "views",
   "?"   => "child_dirs",
-  "ENTER"   => "select_first",
+  "ENTER"   => "select_current",
   "D"   => "delete_file",
   "M"   => "file_actions most",
   "Q"   => "quit_command",
@@ -1038,9 +1038,10 @@ def child_dirs
   $title = "Child directories"
   $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
 end
-def select_first
+def select_current
   ## vp is local there, so i can do $vp[0]
-  open_file $view[$sta] if $view[$sta]
+  #open_file $view[$sta] if $view[$sta]
+  open_file $view[$cursor] if $view[$cursor]
 end
 
 ## create a list of dirs in which some action has happened, for saving
@@ -1119,9 +1120,12 @@ end
 
 ## prompt user for file shortcut and return file or nil
 #
-def ask_hint
+def ask_hint deflt=nil
   f = nil
   ch = get_char
+  if ch == "ENTER" 
+    return deflt
+  end
   ix = get_index(ch, $viewport.size)
   f = $viewport[ix] if ix
   return f
@@ -1163,8 +1167,8 @@ def file_actions action=nil
     text = "#{sct} files"
     file = $selected_files
   else
-    print "[#{acttext}] Choose a file: "
-    file = ask_hint
+    print "[#{acttext}] Choose a file [#{$view[$cursor]}]: "
+    file = ask_hint $view[$cursor]
     return unless file
     text = file
   end
@@ -1338,13 +1342,9 @@ def pipe
 end
 def cursor_scroll_dn
   moveto(pos() + MSCROLL)
-  #$cursor += MSCROLL
-  #$cursor = [$cursor, $view.size - 1].min
 end
 def cursor_scroll_up
   moveto(pos() - MSCROLL)
-  #$cursor -= MSCROLL
-  #$cursor = [$cursor, 0].max
 end
 def cursor_dn
   moveto(pos() + 1)
