@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-02 20:08
+#  Last update: 2013-03-03 14:58
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -232,6 +232,7 @@ $help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_
 
   ## main loop which calls all other programs
 def run()
+  home=ENV['HOME']
   ctr=0
   config_read
   $files = `zsh -c 'print -rl -- *(#{$hidden}M)'`.split("\n")
@@ -255,11 +256,13 @@ def run()
     $sta = 0 if $sta >= fl || $sta < 0
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
-    $title ||= Dir.pwd
+    $title ||= Dir.pwd.sub(home, "~")
     system("clear")
     # title
     print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
-    print "#{BOLD}#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}#{CLEAR}\n"
+    t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
+    t = t[t.size-$gcols..-1] if t.size >= $gcols
+    print "#{BOLD}#{t}#{CLEAR}\n"
     ## nilling the title means a superimposed one gets cleared.
     #$title = nil
     # split into 2 procedures so columnate can e clean and reused.
@@ -487,6 +490,8 @@ def open_file f
     end
   end
   nextpos = nil
+
+  # could be a bookmark with position attached to it
   if f.index(":")
     f, nextpos = f.split(":")
   end
