@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-03 14:58
+#  Last update: 2013-03-03 18:01
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -965,6 +965,8 @@ def post_cd
     $selected_files = []
   end
   $visual_block_start = nil
+  $stact = 0
+  screen_settings
   revert_dir_pos
 end
 #
@@ -1142,8 +1144,10 @@ end
 def command_file prompt, *command
   pauseyn = command.shift
   command = command.join " "
-  print "#{prompt} :: Enter file shortcut: "
-  file = ask_hint
+    print "[#{prompt}] Choose a file [#{$view[$cursor]}]: "
+    file = ask_hint $view[$cursor]
+  #print "#{prompt} :: Enter file shortcut: "
+  #file = ask_hint
   perror "Command Cancelled" unless file
   return unless file
   file = File.expand_path(file)
@@ -1180,7 +1184,6 @@ def screen_settings
   $pagesize = 60
   #$gviscols = 3
   $pagesize = $grows * $gviscols
-  $stact = 0
 end
 ## moves column offset so we can reach unindexed columns or entries
 # 0 forward and any other back/prev
