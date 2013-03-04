@@ -1,6 +1,8 @@
 cetus
 =====
 
+lightning-fast file navigator
+
 fork of lyra with a different hotkey idea. Use this for quickly navigating your file system using hotkeys
 and bookmarks, and executing commands on single or multiple files easily.
 
@@ -63,6 +65,14 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * Note that I use readline for most entries, so you can press UP arrow to get previous entries.
 
+
+## Requirements ##
+
+Requires ruby 1.9.3, and uses zsh for globbing. 
+Uses $EDITOR and $MANPAGER or $PAGER.
+
+Optionally uses ack, locate, find for options with that name. You may replace ack with ag or other.
+Optionally has interface to `z` and `viminfo` -- can be replaced with what you use.
 
 ## INSTALL ##
 
