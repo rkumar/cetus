@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-05 15:51
+#  Last update: 2013-03-06 01:09
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -21,7 +21,7 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.1.2"
+VERSION="0.1.3"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -602,6 +602,7 @@ end
 ## unselect all files
 def unselect_all
   $selected_files = []
+  $visual_mode = nil
 end
 
 ## select all files
@@ -683,7 +684,7 @@ def goto_bookmark ch=nil
     print "Enter bookmark char: "
     ch = get_char
   end
-  if ch =~ /^[A-Z]$/
+  if ch =~ /^[0-9A-Z]$/
     d = $bookmarks[ch]
     # this is if we use zfm's bookmarks which have a position
     # this way we leave the position as is, so it gets written back
@@ -741,7 +742,7 @@ def show_marks
   puts
   print "Enter bookmark to goto: "
   ch = get_char
-  goto_bookmark(ch) if ch =~ /^[A-Z]$/
+  goto_bookmark(ch) if ch =~ /^[0-9A-Z]$/
 end
 # MENU MAIN -- keep consistent with zfm
 def main_menu
@@ -1015,13 +1016,13 @@ end
 
 ## accept a character to save this dir as a bookmark
 def create_bookmark
-  print "Enter (upper case) char for bookmark: "
+  print "Enter A to Z or 0-9 for bookmark: "
   ch = get_char
-  if ch =~ /^[A-Z]$/
+  if ch =~ /^[0-9A-Z]$/
     $bookmarks[ch] = "#{Dir.pwd}:#{$cursor}"
     $modified = true
   else
-    perror "Bookmark must be upper-case character"
+    perror "Bookmark must be upper-case character or number."
   end
 end
 def subcommand
