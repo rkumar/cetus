@@ -76,13 +76,20 @@ Optionally has interface to `z` and `viminfo` -- can be replaced with what you u
 
 ## INSTALL ##
 
-Copy cetus.rb to somewhere on your path, e.g. $HOME/bin
+(I have renamed cetus.rb to cetus and created a gem, so its in the bin folder)
 
-     cp cetus.rb ~/bin
+Copy cetus to somewhere on your path, e.g. $HOME/bin
 
-     alias c=~/bin/cetus.rb
+     cp cetus ~/bin
+
+     alias c=~/bin/cetus
 
      $ c
+
+Or : 
+
+     gem install cetus
+     alias c=cetus
 
 To quit, press "Q" or :q or :wq or :x. If you have created bookmarks, they will be saved with :x and :wq. :q will warn if you quitting with unsaved bookmarks. Used files and dirs are also saved when saving happens. However, if you have not saved bookmarks then you will not be prompted to save used dirs and files.
 
