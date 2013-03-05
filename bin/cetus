@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 # ----------------------------------------------------------------------------- #
-#         File: cetus.rb
+#         File: cetus
 #  Description: Fast file navigation, a tiny version of zfm
 #               but with a diffrent indexing mechanism
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-03 18:01
+#  Last update: 2013-03-05 15:51
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -21,7 +21,7 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.1.1-b"
+VERSION="0.1.2"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -613,7 +613,9 @@ end
 def goto_dir
   print "Enter path: "
   begin
-    path = gets.chomp
+    #path = gets.chomp
+    path = Readline::readline('>', true)
+    return if path == ""
     #rescue => ex
   rescue Exception => ex
     perror "Cancelled cd, press a key"
@@ -706,7 +708,8 @@ end
 ## take regex from user, to run on files on screen, user can filter file names
 def enter_regex
   print "Enter (regex) pattern: "
-  $patt = gets().chomp
+  #$patt = gets().chomp
+  $patt = Readline::readline('>', true)
   ctr = 0
 end
 def next_page
@@ -753,6 +756,8 @@ def main_menu
     :F => :filter_menu,
     :c => :command_menu ,
     :B => :bindkey_ext_command,
+    :M => :newdir,
+    "%" => :newfile,
     :x => :extras
   }
   menu "Main Menu", h
@@ -847,7 +852,7 @@ def command_menu
   # should be able to sort THIS listing and not rerun command. But for that I'd need to use
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
-  h = { :t => :today, :D => :default_command }
+  h = { :t => :today, :D => :default_command , :R => :remove_from_list}
   if $editor_mode 
     h[:e] = :pager_mode
   else
@@ -1022,7 +1027,9 @@ end
 def subcommand
   print "Enter command: "
   begin
-    command = gets().chomp
+    #command = gets().chomp
+    command = Readline::readline('>', true)
+    return if command == ""
   rescue Exception => ex
     return
   end
@@ -1242,7 +1249,9 @@ def file_actions action=nil
     refresh
   when :move
     print "move #{text} to : "
-    target = gets().chomp
+    #target = gets().chomp
+    target = Readline::readline('>', true)
+    return if target == ""
     if target.size > 2
       if File.directory? target
         FileUtils.mv text, target
@@ -1255,7 +1264,9 @@ def file_actions action=nil
     end
   when :zip
     print "Archive name: "
-    target = gets().chomp
+    #target = gets().chomp
+    target = Readline::readline('>', true)
+    return if target == ""
     # don't want a blank space or something screwing up
     if target && target.size > 3
       if File.exists? target
@@ -1378,11 +1389,11 @@ end
 #  i need to do a shell join if I am to pipe ffiles to say: xargs ls -t
 #  but if i want to pipe names to grep xxx then i need to join with newlines
 def pipe
-  #print "Enter pipe to filter existing files through: "
-  #pipe = gets().chomp
-  #if pipe != ""
-  #end
 end
+
+## some cursor movement functions
+##
+#
 def cursor_scroll_dn
   moveto(pos() + MSCROLL)
 end
@@ -1443,6 +1454,8 @@ end
 def file_matching? file, patt
   file =~ /#{patt}/
 end
+
+## generic method to take cursor to next position for a given condition
 def return_next_match binding, *args
   first = nil
   ix = 0
@@ -1500,4 +1513,62 @@ def revert_dir_pos
     raise "cursor is nil" unless $cursor
   end
 end
+def newdir
+  print 
+  print "Enter directory name: "
+  str = Readline::readline('>', true)
+  return if str == ""
+  if File.exists? str
+    perror "#{str} exists."
+    return
+  end
+  begin
+    FileUtils.mkdir str
+    $used_dirs.insert(0, str) if File.exists?(str)
+    refresh
+  rescue Exception => ex
+    perror "Error in newdir: #{ex}"
+  end
+end
+def newfile
+  print 
+  print "Enter file name: "
+  str = Readline::readline('>', true)
+  return if str == ""
+  system "$EDITOR #{str}"
+  $visited_files.insert(0, str) if File.exists?(str)
+  refresh
+end
+
+##
+# remove current entry from used dirs list, since we may not want some entries being there
+#
+def remove_from_list
+  if $selected_files.size > 0
+    sz = $selected_files.size
+    print "Remove #{sz} files from used list (y)?: "
+    ch = get_char
+    return if ch != "y"
+    $used_dirs = $used_dirs - $selected_files
+    $visited_files = $visited_files - $selected_files
+    unselect_all
+    $modified = true
+    return
+  end
+  print
+  ## what if selected some rows
+  file = $view[$cursor]
+  print "Remove #{file} from used list (y)?: "
+  ch = get_char
+  return if ch != "y"
+  file = File.expand_path(file)
+  if File.directory? file
+    $used_dirs.delete(file)
+  else
+    $visited_files.delete(file)
+  end
+  refresh
+  $modified = true
+end
+
 run if __FILE__ == $PROGRAM_NAME
