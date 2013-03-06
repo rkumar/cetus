@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-06 12:32
+#  Last update: 2013-03-06 20:06
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -552,7 +552,7 @@ def run_command f
     puts "#{command} #{files} #{command2}"
     system "#{command} #{files} #{command2}"
   rescue Exception => ex
-    perror "Canceled command, press a key"
+    perror "Canceled command, (#{ex}) press a key"
     return
   end
   begin
@@ -986,7 +986,8 @@ def config_read
     $used_dirs.push(*(DIRS.split ":"))
     $visited_files.push(*(FILES.split ":"))
     #$bookmarks.push(*bookmarks) if bookmarks
-    chars = ('A'..'Z')
+    chars = ('A'..'Z').to_a
+    chars.concat( ('0'..'9').to_a )
     chars.each do |ch|
       if Kernel.const_defined? "BM_#{ch}"
         $bookmarks[ch] = Kernel.const_get "BM_#{ch}"
@@ -1208,6 +1209,7 @@ end
 # I should be able to pass in new actions that are external commands
 def file_actions action=nil
   h = { :d => :delete, :m => :move, :r => :rename, :v => ENV["EDITOR"] || :vim,
+    :c => :copy, :C => :chdir,
     :l => :less, :s => :most , :f => :file , :o => :open, :x => :dtrx, :z => :zip }
   #acttext = h[action.to_sym] || action
   acttext = action || ""
@@ -1253,16 +1255,25 @@ def file_actions action=nil
     #target = gets().chomp
     target = Readline::readline('>', true)
     return if target == ""
-    if target.size > 2
-      if File.directory? target
-        FileUtils.mv text, target
-        refresh
-      else
-        perror "Target not a dir"
-      end
+    if File.directory? target
+      FileUtils.mv text, target
+      refresh
     else
-      perror "Cancelled move"
+      perror "Target not a dir"
     end
+  when :copy
+    print "copy #{text} to : "
+    target = Readline::readline('>', true)
+    return if target == ""
+    target = File.basename(text) if target == "."
+    if File.exists? target
+      perror "Target (#{target}) exists"
+    else
+      FileUtils.cp text, target
+      refresh
+    end
+  when :chdir
+    change_dir File.dirname(text)
   when :zip
     print "Archive name: "
     #target = gets().chomp
@@ -1355,6 +1366,7 @@ def locate
   return if pattern == ""
   $title = "Files found using 'locate' #{pattern}"
   files = `locate #{pattern}`.split("\n")
+  files.reject! {|x| x = File.expand_path(x); !File.exists?(x) }
   if files.size == 0
     perror "No files found."
   else
