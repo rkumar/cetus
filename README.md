@@ -41,7 +41,7 @@ The rest is similar to lyra. Some key points are highlighted here.
 
 Other than using bookmarks, you can jump quickly to other directories or open files using BACKTICK and the releant option which should become part of muscle memory very fast. 
 
-* Use Alt-d and Alt-f to see used directories and used files. Used directories are those dirs in which you have opened a file, not all dirs you've traversed.
+* Use Alt-d and Alt-f to see used directories and used files. Used directories are those dirs in which you have opened a file, not all dirs you've traversed. Certain directories are added to this list to make it more useful such as GEM_HOME, RUBYPATH, GEM_PATH, RUBYLIB, PYTHONPATH and PYTHONHOME.
 
 * By default selecting a file invokes $EDITOR, the default command can be changed from the menu.
 
@@ -49,7 +49,7 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * use Alt+ and Alt- to increase or decrease the number of columns shown on screen. By default 3 are shown. 
 
-* Use '=' to toggle hidden files, long listing, ignore case etc.
+* Use '=' to toggle hidden files, long listing, ignore case , pager/editor mode, etc.
 
 * Use slash "/" to run a regex on the dir listing.
 
