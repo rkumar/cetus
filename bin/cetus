@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-11 11:31
+#  Last update: 2013-03-11 14:30
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 require 'readline'
@@ -239,6 +239,7 @@ def run()
   ctr=0
   config_read
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  enhance_file_list
   fl=$files.size
 
   selectedix = nil
@@ -979,6 +980,8 @@ def post_cd
   $visual_block_start = nil
   $stact = 0
   screen_settings
+  # i think this will screw with the dir_pos since it is not filename based.
+  enhance_file_list
   revert_dir_pos
 end
 #
@@ -1604,7 +1607,60 @@ def remove_from_list
   refresh
   $modified = true
 end
+#
+# If there's a short file list, take recently mod and accessed folders and put latest
+# files from there and insert it here. I take both since recent mod can be binaries / object
+# files and gems created by a process, and not actually edited files. Recent accessed gives
+# latest source, but in some cases even this can be misleading since running a program accesses
+# include files.
 def enhance_file_list
+  return if $files.size > 15
+  # if only one entry and its a dir
+  # get its children and maybe the recent mod files a few
+  
+  if $files.size == 1
+    # its a dir, let give the next level at least
+    if $files.first[-1] == "/"
+      d = $files.first
+      f = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
+      if f && f.size > 0
+        $files.concat f
+        return
+      end
+    else
+      # just a file, not dirs here
+      return
+    end
+  end
+  ## first check accessed else modified will change accessed
+  moda = `zsh -c 'print -rn -- *(/oa[1]M)'`
+  if moda && moda != ""
+    modf = `zsh -c 'print -rn -- #{moda}*(oa[1]M)'`
+    if modf && modf != ""
+      insert_into_list moda, modf
+    end
+    modm = `zsh -c 'print -rn -- #{moda}*(om[1]M)'`
+    if modm && modm != "" && modm != modf
+      insert_into_list moda, modm
+    end
+  end
+  ## get last modified dir
+  modm = `zsh -c 'print -rn -- *(/om[1]M)'`
+  if modm != moda
+    modmf = `zsh -c 'print -rn -- #{modm}*(oa[1]M)'`
+    insert_into_list modm, modmf
+    modmf1 = `zsh -c 'print -rn -- #{modm}*(om[1]M)'`
+    insert_into_list(modm, modmf1) if modmf1 != modmf
+  else
+    # if both are same then our options get reduced so we need to get something more
+    # If you access the latest mod dir, then come back you get only one, since mod and accessed
+    # are the same dir, so we need to find the second modified dir
+  end
+end
+def insert_into_list dir, file
+  ix = $files.index(dir)
+  raise "something wrong can find #{dir}." unless ix
+  $files.insert ix+1, file
 end
 
 run if __FILE__ == $PROGRAM_NAME
