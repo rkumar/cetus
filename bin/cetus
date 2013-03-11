@@ -6,9 +6,13 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-11 14:30
+#  Last update: 2013-03-11 18:30
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
+#  == TODO
+#  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH, 
+#  Make rubygem aware : gemspec or Gemfile the expand lib and bin
+#  fpath if existing
 require 'readline'
 require 'io/wait'
 # http://www.ruby-doc.org/stdlib-1.9.3/libdoc/shellwords/rdoc/Shellwords.html
@@ -189,6 +193,7 @@ $gviscols = 3
 $pagesize = $grows * $gviscols
 $stact = 0
 $editor_mode = true
+$enhanced_mode = true
 $visual_block_start = nil
 $pager_command = {
   :text => 'most',
@@ -758,6 +763,7 @@ def main_menu
     :v => :viminfo,
     :z => :z_interface,
     :d => :child_dirs,
+    :r => :recent_files,
     :t => :dirtree,
     "4" => :tree,
     :s => :sort_menu, 
@@ -769,10 +775,6 @@ def main_menu
     :x => :extras
   }
   menu "Main Menu", h
-end
-def toggle_menu
-  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns}
-  menu "Toggle Menu", h
 end
 def menu title, h
   return unless h
@@ -790,7 +792,8 @@ def menu title, h
   return ch, binding
 end
 def toggle_menu
-  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns}
+  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns, 
+  :p => :toggle_pager_mode, :e => :toggle_enhanced_list}
   ch, menu_text = menu "Toggle Menu", h
   case menu_text
   when :toggle_hidden
@@ -805,6 +808,16 @@ def toggle_menu
     #$long_listing = false if $gviscols > 1 
     x = $grows * $gviscols
     $pagesize = $pagesize==x ? $grows : x
+  when :toggle_pager_mode
+    $editor_mode = !$editor_mode
+    if $editor_mode
+      $default_command = nil
+    else
+      $default_command = ENV['MANPAGER'] || ENV['PAGER']
+    end
+  when :toggle_enhanced_list
+    $enhanced_mode = !$enhanced_mode
+
   when :toggle_long_list
     $long_listing = !$long_listing
     if $long_listing
@@ -1109,6 +1122,11 @@ def tree
   # Caution: use only for small projects, don't use in root.
   $title = "Full Tree"
   $files = `zsh -c 'print -rl -- **/*(#{$sorto}#{$hidden}M)'`.split("\n")
+end
+def recent_files
+  # print -rl -- **/*(Dom[1,10])
+  $title = "Recent files"
+  $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n")
 end
 def select_current
   ## vp is local there, so i can do $vp[0]
@@ -1614,7 +1632,7 @@ end
 # latest source, but in some cases even this can be misleading since running a program accesses
 # include files.
 def enhance_file_list
-  return if $files.size > 15
+  return unless $enhanced_mode
   # if only one entry and its a dir
   # get its children and maybe the recent mod files a few
   
@@ -1632,6 +1650,40 @@ def enhance_file_list
       return
     end
   end
+  # 
+  # check if a ruby project dir, although it could be a backup file too,
+  # if so , expand lib and maby bin, put a couple recent files
+  #
+  if $files.index("Gemfile") || $files.grep(/\.gemspec/).size > 0
+    # usually the lib dir has only one file and one dir
+    flg = false
+    if $files.index("lib/")
+      f = `zsh -c 'print -rl -- lib/*(om[1,5]M)'`.split("\n")
+      if f && f.size() > 0
+        insert_into_list("lib/", f)
+        flg = true
+      end
+      dd = File.basename(Dir.pwd)
+      if f.index("lib/#{dd}/")
+        f = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]M)'`.split("\n")
+        if f && f.size() > 0
+          insert_into_list("lib/#{dd}/", f)
+          flg = true
+        end
+      end
+    end
+    if $files.index("bin/")
+      f = `zsh -c 'print -rl -- bin/*(om[1,5]M)'`.split("\n")
+      insert_into_list("bin/", f) if f && f.size() > 0
+      flg = true
+    end
+    return if flg
+
+    # lib has a dir in it with the gem name
+
+  end
+  return if $files.size > 15
+
   ## first check accessed else modified will change accessed
   moda = `zsh -c 'print -rn -- *(/oa[1]M)'`
   if moda && moda != ""
@@ -1660,7 +1712,7 @@ end
 def insert_into_list dir, file
   ix = $files.index(dir)
   raise "something wrong can find #{dir}." unless ix
-  $files.insert ix+1, file
+  $files.insert ix, *file
 end
 
 run if __FILE__ == $PROGRAM_NAME
