@@ -65,6 +65,9 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * Use BACKTICK "a" for using `ack` in the current dir. Then you can select from listed files and edit or do whatever. Similarly, BACKTICK "l" for running `locate`, and BACKTICK "/" for running `find`.
 
+* For small projects with more directories and few files, traversal can be a pain. Now, `dirtree` gives directory tree, and tree gives the entire tree of files and dirs to get to a file deep within instantly. Dirtree is mapped to BACKTICK-t and F3. Tree is mapped to BACKTICK-4 and F4.
+Thus, F2 gives only child dirs in current dir, F3 gives recursive directories and F4 gives the entire tree.
+
 * Note that I use readline for most entries, so you can press UP arrow to get previous entries.
 
 
