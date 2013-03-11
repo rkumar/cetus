@@ -53,6 +53,8 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * Use slash "/" to run a regex on the dir listing.
 
+* Use question "?" view directory tree in order to jump down several levels at once
+
 * Use ESCAPE or C-c to clear any filter, regex, sort order, sub-listing etc
 
 * TAB switches between various views such as order by modified time, order by access time, dirs only, oldest files etc.
