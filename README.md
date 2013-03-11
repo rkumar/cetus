@@ -70,6 +70,11 @@ Thus, F2 gives only child dirs in current dir, F3 gives recursive directories an
 
 * Note that I use readline for most entries, so you can press UP arrow to get previous entries.
 
+* A new enhanced list mode (Which can be toggled off), which tries to add more files to the list if there are very few shown:
+   - it detects a rubygem dir and shows a few recent files from bin and lib 
+   - if there's only one file in the dir and it is a dir, it expands it
+   - if there are less than 15 files in list, it gets the recently modified and recently accessed
+     dir/s and shows the most recent file from each.
 
 ## Requirements ##
 
