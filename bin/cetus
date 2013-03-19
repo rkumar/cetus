@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2013-03-12 21:02
+#  Last update: 2013-03-19 19:44
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 #  == TODO
@@ -1660,6 +1660,7 @@ def enhance_file_list
       f = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
       if f && f.size > 0
         $files.concat f
+        $files.concat get_important_files(d)
         return
       end
     else
@@ -1674,6 +1675,7 @@ def enhance_file_list
   if $files.index("Gemfile") || $files.grep(/\.gemspec/).size > 0
     # usually the lib dir has only one file and one dir
     flg = false
+    $files.concat get_important_files(Dir.pwd)
     if $files.index("lib/")
       f = `zsh -c 'print -rl -- lib/*(om[1,5]M)'`.split("\n")
       if f && f.size() > 0
@@ -1727,9 +1729,29 @@ def enhance_file_list
   end
 end
 def insert_into_list dir, file
-  ix = $files.index(dir)
-  raise "something wrong can find #{dir}." unless ix
-  $files.insert ix, *file
+  #ix = $files.index(dir)
+  #raise "something wrong can find #{dir}." unless ix
+  #$files.insert ix, *file
+  # 2013-03-19 - 19:42 adding at end to avoid confusion
+  $files.concat file 
+end
+def get_important_files dir
+  # checks various lists like visited_files and bookmarks
+  # to see if files from this dir or below are in it.
+  # More to be used in a dir with few files.
+  list = []
+  l = dir.size + 1
+  $visited_files.each do |e|
+    if e.index(dir) == 0
+      list << e[l..-1]
+    end
+  end
+  # bookmarks have : which needs to be removed
+  #list1 = $bookmarks.values.select do |e|
+    #e.index(dir) == 0
+  #end
+  #list.concat list1
+  return list
 end
 
 run if __FILE__ == $PROGRAM_NAME
