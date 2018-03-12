@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2014-03-31 00:30
+#  Last update: 2018-03-12 22:58
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 #  == TODO
@@ -60,8 +60,11 @@ $bindings = {
   "D"   => "delete_file",
   "M"   => "file_actions most",
   "Q"   => "quit_command",
-  "RIGHT"   => "column_next",
-  "LEFT"   => "column_next 1",
+  #"RIGHT"   => "column_next",
+  "RIGHT"   => "select_current", # changed 2018-03-12 - for faster navigation
+  "LEFT"   => "goto_parent_dir", # changed on 2018-03-12 - earlier column_next 1
+  "]"   => "column_next",
+  "["   => "column_next 1",
   "C-x"   => "file_actions",
   "M--"   => "columns_incdec -1",
   "M-+"   => "columns_incdec 1",
@@ -77,7 +80,9 @@ $bindings = {
   "F1"   => "print_help",
   "F2"   => "child_dirs",
   "F3"   => "dirtree",
-  "F4"   => "tree"
+  "F4"   => "tree",
+  "S-F1"   => "dirtree",
+  "S-F2"   => "tree"
 
 }
 
@@ -117,12 +122,16 @@ KEY_F7='[18~'
 KEY_F8='[19~'
 KEY_F9='[20~'
 KEY_F10='[21~'
+KEY_S_F1='[1;2P'
 $kh[KEY_F5]="F5"
 $kh[KEY_F6]="F6"
 $kh[KEY_F7]="F7"
 $kh[KEY_F8]="F8"
 $kh[KEY_F9]="F9"
 $kh[KEY_F10]="F10"
+# testing out shift+Function. these are the codes my kb generates
+$kh[KEY_S_F1]="S-F1"
+$kh['[1;2Q']="S-F2"
 
 ## get a character from user and return as a string
 # Adapted from:
@@ -192,7 +201,8 @@ $pagesize = 60
 $gviscols = 3
 $pagesize = $grows * $gviscols
 $stact = 0
-$editor_mode = true
+#$editor_mode = true
+$editor_mode = false # changed 2018-03-12 - so we start in pager mode
 $enhanced_mode = true
 $visual_block_start = nil
 $pager_command = {
@@ -218,6 +228,7 @@ BLUE       = "\e[1;34m"
 
 ON_BLUE    = "\e[44m"
 REVERSE    = "\e[7m"
+UNDERLINE    = "\e[4m"
 CURSOR_COLOR = ON_BLUE
 $patt=nil
 $ignorecase = true
@@ -1144,6 +1155,8 @@ def tree
   $title = "Full Tree"
   $files = `zsh -c 'print -rl -- **/*(#{$sorto}#{$hidden}M)'`.split("\n")
 end
+# lists recent files in current dir
+# TODO in some cases it shows mostly .git files, we need to prune those
 def recent_files
   # print -rl -- **/*(Dom[1,10])
   $title = "Recent files"
