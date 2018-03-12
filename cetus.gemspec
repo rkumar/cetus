@@ -5,15 +5,18 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 Gem::Specification.new do |spec|
   spec.name          = "cetus"
-  spec.version       = "0.1.15"
+  spec.version       = "0.1.16"
   spec.authors       = ["Rahul Kumar"]
   spec.email         = ["sentinel1879@gmail.com"]
   spec.description   = %q{lightning fast file navigator}
-  spec.summary       = %q{lightning fast file navigator - ruby 1.9.3}
+  spec.summary       = %q{lightning fast file navigator - ruby 1.9.3 .. ruby 2.5}
   spec.homepage      = "http://github.com/rkumar/cetus"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files`.split($/)
+  # http://bundler.io/blog/2015/03/20/moving-bins-to-exe.html
+  # TODO change to exe as per above
+
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
