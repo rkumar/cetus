@@ -10,6 +10,8 @@ Latest changes:
 Also, pressing RIGHT ARROW on a file with open the file.
 Previously RIGHT and LEFT arrows would move to next or previous columns, i have put this on left and right square bracket.
 
+2018-03-13 - unable to push new gem 0.1.16 to rubygems.
+
 fork of lyra with a different hotkey idea. Use this for quickly navigating your file system using hotkeys
 and bookmarks, and executing commands on single or multiple files easily.
 
