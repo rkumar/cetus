@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.name          = "cetus"
   spec.version       = "0.1.16"
   spec.authors       = ["Rahul Kumar"]
-  spec.email         = ["sentinel1879@gmail.com"]
+  spec.email         = ["oneness.univ@gmail.com"]
   spec.description   = %q{lightning fast file navigator}
   spec.summary       = %q{lightning fast file navigator - ruby 1.9.3 .. ruby 2.5}
   spec.homepage      = "http://github.com/rkumar/cetus"
