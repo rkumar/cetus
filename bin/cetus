@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2018-03-12 22:58
+#  Last update: 2019-01-19 15:00
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 #  == TODO
@@ -25,7 +25,7 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.1.13"
+VERSION="0.1.17"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -328,9 +328,20 @@ def run()
     end
     break if $quitting
   end
+  write_curdir 
   puts "bye"
   config_write if $writing
 end
+
+## write current dir to a file so we can ccd to it when exiting
+def write_curdir
+
+  f =  File.expand_path("~/.fff_d")
+  File.open(f, "w") do
+    puts Dir.pwd
+  end
+end
+
 
 ## code related to long listing of files
 GIGA_SIZE = 1073741824.0
