@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-04 12:41
+#  Last update: 2019-03-04 18:55
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -14,6 +14,8 @@
 # 2019-03-04 - change clear to go to 0,0 and clear down to reduce pollution
 #  == TODO
 #  2019-03-04 - calling most or vim still pollutes main screen when quitting
+#  2019-03-04 - using new fff clear and setup functions. coming back from most
+#    i lose the top row and maybe two rows. Even clear is making me lose a line.
 #  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
 #  fpath if existing
@@ -140,10 +142,58 @@ $kh[KEY_F10]="F10"
 $kh[KEY_S_F1]="S-F1"
 $kh['[1;2Q']="S-F2"
 
-def system_clear
+def old_clear_screen
+  system 'clear'
+  return
   system('tput cup 0 0')
   # system 'tput ed'
   print "\e[J"
+end
+
+# copied from fff
+def clear_screen
+  # Only clear the scrolling window (dir item list).
+  # '\e[%sH':    Move cursor to bottom of scroll area.
+  # '\e[9999C':  Move cursor to right edge of the terminal.
+  # '\e[1J':     Clear screen to top left corner (from cursor up).
+  # '\e[2J':     Clear screen fully (if using tmux) (fixes clear issues).
+  # '\e[1;%sr':  Clearing the screen resets the scroll region(?). Re-set it.
+  #              Also sets cursor to (0,0).
+  # ENV["TMUX:+\e[2J]"],
+  printf("\e[%sH\e[9999C\e[1J\e[1;%sr", \
+         $glines - 0, # was 2
+         $glines) # was grows
+end
+
+# copied from fff
+# Call before shelling to editor pager and when exiting
+def reset_terminal
+    # Reset the terminal to a useable state (undo all changes).
+    # '\e[?7h':  Re-enable line wrapping.
+    # '\e[?25h': Unhide the cursor.
+    # '\e[2J':   Clear the terminal.
+    # '\e[;r':   Set the scroll region to its default value.
+    #            Also sets cursor to (0,0).
+    print "\e[?7h\e[?25h\e[2J\e[;r"
+
+    # Show user input.
+    system 'stty echo'
+end
+
+# copied from fff
+# call AFTER shelling to most or vim
+def setup_terminal
+  # Setup the terminal for the TUI.
+  # '\e[?7l':    Disable line wrapping.
+  # '\e[?25l':   Hide the cursor.
+  # '\e[2J':     Clear the screen.
+  # '\e[1;Nr':   Limit scrolling to scrolling area.
+  #              Also sets cursor to (0,0).
+  printf("\e[?7l\e[?25l\e[2J\e[1;%sr", $glines)
+  # earlier glines was grows
+
+  # Hide echoing of user input
+  system 'stty -echo'
 end
 
 ## get a character from user and return as a string
@@ -155,39 +205,41 @@ def get_char
     system('stty raw -echo 2>/dev/null') # turn raw input on
     c = nil
     #if $stdin.ready?
-      c = $stdin.getc
-      cn=c.ord
-      return "ENTER" if cn == 10 || cn == 13
-      return "BACKSPACE" if cn == 127
-      return "C-SPACE" if cn == 0
-      return "SPACE" if cn == 32
-      # next does not seem to work, you need to bind C-i
-      return "TAB" if cn == 8
-      if cn >= 0 && cn < 27
-        x= cn + 96
-        return "C-#{x.chr}"
-      end
-      if c == ''
-        buff=c.chr
-        while true
-          k = nil
-          if $stdin.ready?
-            k = $stdin.getc
-            #puts "got #{k}"
-            buff += k.chr
-          else
-            x=$kh[buff]
-            return x if x
-            #puts "returning with  #{buff}"
-            if buff.size == 2
-              ## possibly a meta/alt char
-              k = buff[-1]
-              return "M-#{k.chr}"
-            end
-            return buff
+    c = $stdin.getc
+    cn = c.ord
+    return 'ENTER' if cn == 10 || cn == 13
+    return 'BACKSPACE' if cn == 127
+    return 'C-SPACE' if cn == 0
+    return 'SPACE' if cn == 32
+    # next does not seem to work, you need to bind C-i
+    return 'TAB' if cn == 8
+
+    if cn >= 0 && cn < 27
+      x = cn + 96
+      return "C-#{x.chr}"
+    end
+    if c == ''
+      buff=c.chr
+      while true
+        k = nil
+        if $stdin.ready?
+          k = $stdin.getc
+          #puts "got #{k}"
+          buff += k.chr
+        else
+          x = $kh[buff]
+          return x if x
+
+          # puts "returning with  #{buff}"
+          if buff.size == 2
+            ## possibly a meta/alt char
+            k = buff[-1]
+            return "M-#{k.chr}"
           end
+          return buff
         end
       end
+    end
     #end
     return c.chr if c
   ensure
@@ -263,7 +315,7 @@ $visual_mode = false
 $help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}Q#{BOLD_OFF} Quit "
 
   ## main loop which calls all other programs
-def run()
+def run
   home=ENV['HOME']
   ctr=0
   config_read
@@ -293,7 +345,7 @@ def run()
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
     $title ||= Dir.pwd.sub(home, "~")
-    system_clear
+    clear_screen
     # title
     print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
     t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
@@ -569,7 +621,10 @@ def open_file f
     else
       comm = comm + " #{Shellwords.escape(f)}"
     end
+    clear_screen
+    reset_terminal
     system("#{comm}")
+    setup_terminal
     f = Dir.pwd + "/" + f if f[0] != '/'
     $visited_files.insert(0, f)
     push_used_dirs Dir.pwd
@@ -718,7 +773,7 @@ def command_mode
   $mode = 'COM'
 end
 def goto_parent_dir
-  change_dir ".."
+  change_dir '..'
 end
 ## This actually filters, in zfm it goes to that entry since we have a cursor there
 #
@@ -774,7 +829,7 @@ def prev_page
 end
 
 def print_help
-  system_clear
+  clear_screen
   puts "HELP"
   puts
   puts "To open a file or dir press 1-9 a-z A-Z "
@@ -1809,6 +1864,11 @@ def get_important_files dir
   return list
 end
 
+Signal.trap('EXIT') {
+  reset_terminal
+  system 'tput rmcup'
+  exit
+}
 run
 # 2019-02-20 - added so alt-screen is used
 system 'tput rmcup'
