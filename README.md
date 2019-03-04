@@ -6,6 +6,10 @@ lightning-fast file navigator
 Tested with ruby 2.5
 
 Latest changes:
+2019-03-04 - q is quit key, not Q
+           - show directories first, then files.
+           - trying not to pollute main screen with listings.
+
 2018-03-12 - now using LEFT and RIGHT arrow keys to go down into a directory, or up to higher directory.
 Also, pressing RIGHT ARROW on a file with open the file.
 Previously RIGHT and LEFT arrows would move to next or previous columns, i have put this on left and right square bracket.
@@ -40,7 +44,7 @@ You can bind other capital letters to any external command. If there are selecte
 The rest is similar to lyra. Some key points are highlighted here.
 
 * Create bookmarks for often used directories using Alt-m. Then access them using single-quote and upper character.
-  You have to be inside the directory when saving a new bookmark. e.g. `'P`. This is a fast way of jumping directories. I've got "P" mapped to projects, and "Z" to zfm, and so forth. 
+  You have to be inside the directory when saving a new bookmark. e.g. `'P`. This is a fast way of jumping directories. I've got "P" mapped to projects, and "Z" to zfm, and so forth.
 
 * Single-quote and small letter jumps to the first file starting with given letter. e.g. `'s`
 
@@ -48,7 +52,7 @@ The rest is similar to lyra. Some key points are highlighted here.
 
 * Backtick is the main menu, which has options for sorting, filtering, seeing often used dirs and files, choosing from dirs in the `z` database, choosing used files from the `.viminfo` file, etc.
 
-Other than using bookmarks, you can jump quickly to other directories or open files using BACKTICK and the releant option which should become part of muscle memory very fast. 
+Other than using bookmarks, you can jump quickly to other directories or open files using BACKTICK and the releant option which should become part of muscle memory very fast.
 
 * Use Alt-d and Alt-f to see used directories and used files. Used directories are those dirs in which you have opened a file, not all dirs you've traversed. Certain directories are added to this list to make it more useful such as GEM_HOME, RUBYPATH, GEM_PATH, RUBYLIB, PYTHONPATH and PYTHONHOME.
 
@@ -56,7 +60,7 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * Switch between editor mode and page mode. OFten you wish to quickly view files (maybe for deleting or moving). You don't want these files to get listed in .viminfo. Switching to pager mode, invokes your $MANPAGER on selected files which makes navigation faster. Set `most` to your MANPAGER.
 
-* use Alt+ and Alt- to increase or decrease the number of columns shown on screen. By default 3 are shown. 
+* use Alt+ and Alt- to increase or decrease the number of columns shown on screen. By default 3 are shown.
 
 * Use '=' to toggle hidden files, long listing, ignore case , pager/editor mode, etc.
 
@@ -80,14 +84,14 @@ Thus, F2 gives only child dirs in current dir, F3 gives recursive directories an
 * Note that I use readline for most entries, so you can press UP arrow to get previous entries.
 
 * A new enhanced list mode (Which can be toggled off), which tries to add more files to the list if there are very few shown:
-   - it detects a rubygem dir and shows a few recent files from bin and lib 
+   - it detects a rubygem dir and shows a few recent files from bin and lib
    - if there's only one file in the dir and it is a dir, it expands it
    - if there are less than 15 files in list, it gets the recently modified and recently accessed
      dir/s and shows the most recent file from each.
 
 ## Requirements ##
 
-Requires ruby 1.9.3, and uses zsh for globbing. 
+Requires ruby 1.9.3, and uses zsh for globbing.
 Uses $EDITOR and $MANPAGER or $PAGER.
 
 Optionally uses ack, locate, find for options with that name. You may replace ack with ag or other.
@@ -105,7 +109,7 @@ Copy cetus to somewhere on your path, e.g. $HOME/bin
 
      $ c
 
-Or : 
+Or :
 
      gem install cetus
      alias c=cetus
