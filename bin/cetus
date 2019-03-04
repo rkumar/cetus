@@ -2,17 +2,19 @@
 # ----------------------------------------------------------------------------- #
 #         File: cetus
 #  Description: Fast file navigation, a tiny version of zfm
-#               but with a diffrent indexing mechanism
+#               but with a different indexing mechanism
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-02-20 19:01
+#  Last update: 2019-03-04 12:41
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
-# 2019-02-20 - added smcup and rmcup so alt-screen is used. works a bit 
+# 2019-02-20 - added smcup and rmcup so alt-screen is used. works a bit
+# 2019-03-04 - change clear to go to 0,0 and clear down to reduce pollution
 #  == TODO
-#  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH, 
+#  2019-03-04 - calling most or vim still pollutes main screen when quitting
+#  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
 #  fpath if existing
 require 'readline'
@@ -21,58 +23,59 @@ require 'io/wait'
 require 'shellwords'
 require 'fileutils'
 # -- requires 1.9.3 for io/wait
-# -- cannot do with Highline since we need a timeout on wait, not sure if HL can do that
+# -- cannot do with Highline since we need a timeout on wait,
+#   not sure if HL can do that
 
 ## INSTALLATION
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
 # 2019-02-20 - added so alt-screen is used
-system "tput smcup"
-VERSION="0.1.19.0"
-O_CONFIG=true
-CONFIG_FILE="~/.lyrainfo"
+system 'tput smcup'
+VERSION = '0.1.20.0'
+O_CONFIG = true
+CONFIG_FILE = '~/.lyrainfo'
 
 $bindings = {}
 $bindings = {
-  "`"   => "main_menu",
-  "="   => "toggle_menu",
-  "!"   => "command_mode",
-  "@"   => "selection_mode_toggle",
-  "M-a" => "select_all",
-  "M-A" => "unselect_all",
-  ","   => "goto_parent_dir",
-  "+"   => "goto_dir",
-  "."   => "pop_dir",
-  ":"   => "subcommand",
-  "'"   => "goto_bookmark",
-  "/"   => "enter_regex",
-  "M-p"   => "prev_page",
-  "M-n"   => "next_page",
-  "SPACE"   => "next_page",
-  "M-f"   => "select_visited_files",
-  "M-d"   => "select_used_dirs",
-  "M-b"   => "select_bookmarks",
-  "M-m"   => "create_bookmark",
-  "M-M"   => "show_marks",
-  "C-c"   => "escape",
-  "ESCAPE"   => "escape",
-  "TAB"   => "views",
-  "C-i"   => "views",
-  "?"   => "dirtree",
-  "ENTER"   => "select_current",
-  "D"   => "delete_file",
-  "M"   => "file_actions most",
-  "Q"   => "quit_command",
+  "`"   => 'main_menu',
+  "="   => 'toggle_menu',
+  "!"   => 'command_mode',
+  "@"   => 'selection_mode_toggle',
+  "M-a" => 'select_all',
+  "M-A" => 'unselect_all',
+  ","   => 'goto_parent_dir',
+  "+"   => 'goto_dir',
+  "."   => 'pop_dir',
+  ":"   => 'subcommand',
+  "'"   => 'goto_bookmark',
+  "/"   => 'enter_regex',
+  "M-p"   => 'prev_page',
+  "M-n"   => 'next_page',
+  "SPACE"   => 'next_page',
+  "M-f"   => 'select_visited_files',
+  "M-d"   => 'select_used_dirs',
+  "M-b"   => 'select_bookmarks',
+  "M-m"   => 'create_bookmark',
+  "M-M"   => 'show_marks',
+  "C-c"   => 'escape',
+  "ESCAPE"   => 'escape',
+  "TAB"   => 'views',
+  "C-i"   => 'views',
+  "?"   => 'dirtree',
+  "ENTER"   => 'select_current',
+  "D"   => 'delete_file',
+  "M"   => 'file_actions most',
+  "Q"   => 'quit_command',
   #"RIGHT"   => "column_next",
-  "RIGHT"   => "select_current", # changed 2018-03-12 - for faster navigation
-  "LEFT"   => "goto_parent_dir", # changed on 2018-03-12 - earlier column_next 1
-  "]"   => "column_next",
-  "["   => "column_next 1",
-  "C-x"   => "file_actions",
-  "M--"   => "columns_incdec -1",
-  "M-+"   => "columns_incdec 1",
-  "S"     =>  "command_file list y ls -lh",
+  "RIGHT"   => 'select_current', # changed 2018-03-12 - for faster navigation
+  "LEFT"   => 'goto_parent_dir', # changed on 2018-03-12 - earlier column_next 1
+  "]"   => 'column_next',
+  "["   => 'column_next 1',
+  "C-x"   => 'file_actions',
+  "M--"   => 'columns_incdec -1',
+  "M-+"   => 'columns_incdec 1',
+  "S"     =>  'command_file list y ls -lh',
   "L"     =>  "command_file Page n less",
   "C-d"   =>  "cursor_scroll_dn",
   "C-b"   =>  "cursor_scroll_up",
@@ -90,7 +93,7 @@ $bindings = {
 
 }
 
-## clean this up a bit, copied from shell program and macro'd 
+## clean this up a bit, copied from shell program and macro'd
 $kh=Hash.new
 $kh["OP"]="F1"
 $kh["[A"]="UP"
@@ -113,8 +116,8 @@ $kh[KEY_END]="End"
 $kh[KEY_F1]="F1"
 $kh[KEY_UP]="UP"
 $kh[KEY_DOWN]="DOWN"
-KEY_LEFT='[D' 
-KEY_RIGHT='[C' 
+KEY_LEFT='[D'
+KEY_RIGHT='[C'
 $kh["OQ"]="F2"
 $kh["OR"]="F3"
 $kh["OS"]="F4"
@@ -137,13 +140,19 @@ $kh[KEY_F10]="F10"
 $kh[KEY_S_F1]="S-F1"
 $kh['[1;2Q']="S-F2"
 
+def system_clear
+  system('tput cup 0 0')
+  # system 'tput ed'
+  print "\e[J"
+end
+
 ## get a character from user and return as a string
 # Adapted from:
 #http://stackoverflow.com/questions/174933/how-to-get-a-single-character-without-pressing-enter/8274275#8274275
 # Need to take complex keys and matc against a hash.
 def get_char
   begin
-    system("stty raw -echo 2>/dev/null") # turn raw input on
+    system('stty raw -echo 2>/dev/null') # turn raw input on
     c = nil
     #if $stdin.ready?
       c = $stdin.getc
@@ -183,7 +192,7 @@ def get_char
     return c.chr if c
   ensure
     #system "stty -raw echo" # turn raw input off
-    system("stty -raw echo 2>/dev/null") # turn raw input on
+    system('stty -raw echo 2>/dev/null') # turn raw input on
   end
 end
 
@@ -276,7 +285,7 @@ def run()
       else
         $view = $files.grep(/#{$patt}/)
       end
-    else 
+    else
       $view = $files
     end
     fl=$view.size
@@ -284,11 +293,11 @@ def run()
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
     $title ||= Dir.pwd.sub(home, "~")
-    system("clear")
+    system_clear
     # title
     print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
     t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
-    t = t[t.size-$gcols..-1] if t.size >= $gcols
+    t = t[t.size - $gcols..-1] if t.size >= $gcols
     print "#{BOLD}#{t}#{CLEAR}\n"
     ## nilling the title means a superimposed one gets cleared.
     #$title = nil
@@ -332,7 +341,7 @@ def run()
     end
     break if $quitting
   end
-  write_curdir 
+  write_curdir
   puts "bye"
   config_write if $writing
 end
@@ -368,7 +377,7 @@ end
 def date_format t
   t.strftime "%Y/%m/%d"
 end
-## 
+##
 #
 # print in columns
 # ary - array of data
@@ -377,7 +386,7 @@ end
 def columnate ary, sz
   buff=Array.new
   return buff if ary.nil? || ary.size == 0
-  
+
   # determine width based on number of files to show
   # if less than sz then 1 col and full width
   #
@@ -437,7 +446,7 @@ def columnate ary, sz
   end
   return buff
 end
-## formats the data with number, mark and details 
+## formats the data with number, mark and details
 def format ary
   #buff = Array.new
   buff = Array.new(ary.size)
@@ -517,6 +526,7 @@ def toggle_select f
     $selected_files.push f
   end
 end
+
 ## open file or directory
 def open_file f
   return unless f
@@ -524,7 +534,7 @@ def open_file f
     f = File.expand_path(f)
   end
   unless File.exist? f
-    # this happens if we use (T) in place of (M) 
+    # this happens if we use (T) in place of (M)
     # it places a space after normal files and @ and * which borks commands
     last = f[-1]
     if last == " " || last == "@" || last == '*'
@@ -584,7 +594,7 @@ def run_command f
   end
   print "Run a command on #{files}: "
   begin
-    #Readline::HISTORY.push(*values) 
+    #Readline::HISTORY.push(*values)
     command = Readline::readline('>', true)
     #command = gets().chomp
     return if command.size == 0
@@ -608,7 +618,7 @@ def run_command f
 end
 
 ## cd to a dir
-def change_dir f, pos=nil
+def change_dir f, pos = nil
   $visited_dirs.insert(0, Dir.pwd)
   f = File.expand_path(f)
   Dir.chdir f
@@ -670,7 +680,7 @@ def goto_dir
     ## check for env variable
     tmp = ENV[path]
     if tmp.nil? || !File.directory?( tmp )
-      ## check for dir in home 
+      ## check for dir in home
       tmp = File.expand_path("~/#{path}")
       if File.directory? tmp
         f = tmp
@@ -762,8 +772,9 @@ end
 def prev_page
   $sta -= $pagesize
 end
+
 def print_help
-  system("clear")
+  system_clear
   puts "HELP"
   puts
   puts "To open a file or dir press 1-9 a-z A-Z "
@@ -789,7 +800,7 @@ def show_marks
 end
 # MENU MAIN -- keep consistent with zfm
 def main_menu
-  h = { 
+  h = {
     :a => :ack,
     "/" => :ffind,
     :l => :locate,
@@ -799,7 +810,7 @@ def main_menu
     :r => :recent_files,
     :t => :dirtree,
     "4" => :tree,
-    :s => :sort_menu, 
+    :s => :sort_menu,
     :F => :filter_menu,
     :c => :command_menu ,
     :B => :bindkey_ext_command,
@@ -825,7 +836,7 @@ def menu title, h
   return ch, binding
 end
 def toggle_menu
-  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns, 
+  h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list , "1" => :toggle_columns,
   :p => :toggle_pager_mode, :e => :toggle_enhanced_list}
   ch, menu_text = menu "Toggle Menu", h
   case menu_text
@@ -838,7 +849,7 @@ def toggle_menu
     refresh
   when :toggle_columns
     $gviscols = 3 if $gviscols == 1
-    #$long_listing = false if $gviscols > 1 
+    #$long_listing = false if $gviscols > 1
     x = $grows * $gviscols
     $pagesize = $pagesize==x ? $grows : x
   when :toggle_pager_mode
@@ -866,7 +877,7 @@ end
 
 def sort_menu
   lo = nil
-  h = { :n => :newest, :a => :accessed, :o => :oldest, 
+  h = { :n => :newest, :a => :accessed, :o => :oldest,
     :l => :largest, :s => :smallest , :m => :name , :r => :rname, :d => :dirs, :c => :clear }
   ch, menu_text = menu "Sort Menu", h
   case menu_text
@@ -897,7 +908,7 @@ def sort_menu
 end
 
 def command_menu
-  ## 
+  ##
   #  since these involve full paths, we need more space, like only one column
   #
   ## in these cases, getting back to the earlier dir, back to earlier listing
@@ -907,7 +918,7 @@ def command_menu
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
   h = { :t => :today, :D => :default_command , :R => :remove_from_list}
-  if $editor_mode 
+  if $editor_mode
     h[:e] = :pager_mode
   else
     h[:e] = :editor_mode
@@ -1074,11 +1085,11 @@ def config_write
   f1 =  File.expand_path(CONFIG_FILE)
   d = $used_dirs.join ":"
   f = $visited_files.join ":"
-  File.open(f1, 'w+') do |f2|  
-    # use "\n" for two lines of text  
+  File.open(f1, 'w+') do |f2|
+    # use "\n" for two lines of text
     f2.puts "DIRS=\"#{d}\""
     f2.puts "FILES=\"#{f}\""
-    $bookmarks.each_pair { |k, val| 
+    $bookmarks.each_pair { |k, val|
       f2.puts "BM_#{k}=\"#{val}\""
       #f2.puts "BOOKMARKS[\"#{k}\"]=\"#{val}\""
     }
@@ -1129,20 +1140,20 @@ def subcommand
     $quitting = true
     $writing = true if $modified
   elsif command == "p"
-    system "echo $PWD | pbcopy"
-    puts "Stored PWD in clipboard (using pbcopy)"
+    system 'echo $PWD | pbcopy'
+    puts 'Stored PWD in clipboard (using pbcopy)'
   end
 end
 def quit_command
   if $modified
-    puts "Press w to save bookmarks before quitting " if $modified
-    print "Press another q to quit "
+    puts 'Press w to save bookmarks before quitting ' if $modified
+    print 'Press another q to quit '
     ch = get_char
   else
     $quitting = true
   end
-  $quitting = true if ch == "q"
-  $quitting = $writing = true if ch == "w"
+  $quitting = true if ch == 'q'
+  $quitting = $writing = true if ch == 'w'
 end
 
 def views
@@ -1179,6 +1190,7 @@ def recent_files
   $title = "Recent files"
   $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n")
 end
+
 def select_current
   ## vp is local there, so i can do $vp[0]
   #open_file $view[$sta] if $view[$sta]
@@ -1266,7 +1278,7 @@ end
 def ask_hint deflt=nil
   f = nil
   ch = get_char
-  if ch == "ENTER" 
+  if ch == "ENTER"
     return deflt
   end
   ix = get_index(ch, $viewport.size)
@@ -1277,16 +1289,17 @@ end
 ## check screen size and accordingly adjust some variables
 #
 def screen_settings
-  $glines=%x(tput lines).to_i
-  $gcols=%x(tput cols).to_i
+  $glines = %x(tput lines).to_i
+  $gcols = %x(tput cols).to_i
   $grows = $glines - 3
   $pagesize = 60
   #$gviscols = 3
   $pagesize = $grows * $gviscols
 end
+
 ## moves column offset so we can reach unindexed columns or entries
 # 0 forward and any other back/prev
-def column_next dir=0
+def column_next dir = 0
   if dir == 0
     $stact += $grows
     $stact = 0 if $stact >= $viewport.size
@@ -1295,9 +1308,10 @@ def column_next dir=0
     $stact = 0 if $stact < 0
   end
 end
+
 # currently i am only passing the action in from the list there as a key
 # I should be able to pass in new actions that are external commands
-def file_actions action=nil
+def file_actions(action=nil)
   h = { :d => :delete, :m => :move, :r => :rename, :v => ENV["EDITOR"] || :vim,
     :c => :copy, :C => :chdir,
     :l => :less, :s => :most , :f => :file , :o => :open, :x => :dtrx, :z => :zip }
@@ -1330,7 +1344,7 @@ def file_actions action=nil
       menu_text = action
   else
     ch, menu_text = menu "File Menu for #{text}", h
-    menu_text = :quit if ch == "q"
+    menu_text = :quit if ch == 'q'
   end
   case menu_text.to_sym
   when :quit
@@ -1407,7 +1421,7 @@ end
 
 # bind a key to an external command wich can be then be used for files
 def bindkey_ext_command
-  print 
+  print
   pbold "Bind a capital letter to an external command"
   print "Enter a capital letter to bind: "
   ch = get_char
@@ -1488,7 +1502,7 @@ def z_interface
     $title = "Directories from ~/.z"
     $files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
     home = ENV['HOME']
-    $files.collect! do |f| 
+    $files.collect! do |f|
       f.sub(/#{home}/,"~")
     end
   end
@@ -1529,7 +1543,7 @@ def moveto pos
   if $visual_mode
     # PWD has to be there in selction
     if $selected_files.index $view[$cursor]
-      # this depends on the direction 
+      # this depends on the direction
       $selected_files = $selected_files - $view[star..fin]
       ## current row remains in selection always.
       $selected_files.push $view[$cursor]
@@ -1545,6 +1559,7 @@ def visual_mode_toggle
     $selected_files.push $view[$cursor]
   end
 end
+
 def visual_block_clear
   if $visual_block_start
     star = [$visual_block_start, $cursor].min
@@ -1554,6 +1569,7 @@ def visual_block_clear
   $visual_block_start = nil
   $visual_mode = nil
 end
+
 def file_starting_with fc
   ix = return_next_match(method(:file_matching?), "^#{fc}")
   if ix
@@ -1571,7 +1587,7 @@ def return_next_match binding, *args
   $view.each_with_index do |elem,ii|
     if binding.call(elem, *args)
       first ||= ii
-      if ii > $cursor 
+      if ii > $cursor
         ix = ii
         break
       end
@@ -1607,7 +1623,7 @@ def filetype f
   nil
 end
 
-def save_dir_pos 
+def save_dir_pos
   return if $sta == 0 && $cursor == 0
   $dir_position[Dir.pwd] = [$sta, $cursor]
 end
@@ -1623,7 +1639,7 @@ def revert_dir_pos
   end
 end
 def newdir
-  print 
+  print
   print "Enter directory name: "
   str = Readline::readline('>', true)
   return if str == ""
@@ -1640,7 +1656,7 @@ def newdir
   end
 end
 def newfile
-  print 
+  print
   print "Enter file name: "
   str = Readline::readline('>', true)
   return if str == ""
@@ -1650,7 +1666,7 @@ def newfile
 end
 
 ##
-# Editing of the User Dir List. 
+# Editing of the User Dir List.
 # remove current entry from used dirs list, since we may not want some entries being there
 #
 def remove_from_list
@@ -1690,7 +1706,7 @@ def enhance_file_list
   return unless $enhanced_mode
   # if only one entry and its a dir
   # get its children and maybe the recent mod files a few
-  
+
   if $files.size == 1
     # its a dir, let give the next level at least
     if $files.first[-1] == "/"
@@ -1706,7 +1722,7 @@ def enhance_file_list
       return
     end
   end
-  # 
+  #
   # check if a ruby project dir, although it could be a backup file too,
   # if so , expand lib and maby bin, put a couple recent files
   #
@@ -1771,7 +1787,7 @@ def insert_into_list dir, file
   #raise "something wrong can find #{dir}." unless ix
   #$files.insert ix, *file
   # 2013-03-19 - 19:42 adding at end to avoid confusion
-  #$files.concat file 
+  #$files.concat file
   $files.push *file
 end
 def get_important_files dir
@@ -1793,6 +1809,6 @@ def get_important_files dir
   return list
 end
 
-run 
+run
 # 2019-02-20 - added so alt-screen is used
-system "tput rmcup"
+system 'tput rmcup'
