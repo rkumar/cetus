@@ -6,9 +6,11 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-01-19 15:09
+#  Last update: 2019-02-20 19:01
 # ----------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
+# == CHANGELOG
+# 2019-02-20 - added smcup and rmcup so alt-screen is used. works a bit 
 #  == TODO
 #  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH, 
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
@@ -25,7 +27,9 @@ require 'fileutils'
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
-VERSION="0.1.18"
+# 2019-02-20 - added so alt-screen is used
+system "tput smcup"
+VERSION="0.1.19.0"
 O_CONFIG=true
 CONFIG_FILE="~/.lyrainfo"
 
@@ -1790,3 +1794,5 @@ def get_important_files dir
 end
 
 run 
+# 2019-02-20 - added so alt-screen is used
+system "tput rmcup"
