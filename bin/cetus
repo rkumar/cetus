@@ -1,13 +1,13 @@
 #!/usr/bin/env ruby
-# ----------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
 #         File: cetus
 #  Description: Fast file navigation, a tiny version of zfm
 #               but with a different indexing mechanism
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-04 23:50
-# ----------------------------------------------------------------------------- #
+#  Last update: 2019-03-07 10:02
+# --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
 # 2019-02-20 - added smcup and rmcup so alt-screen is used. works a bit
@@ -67,6 +67,9 @@ $bindings = {
   'C-i' => 'views',
   '?' => 'dirtree',
   'ENTER' => 'select_current',
+  'C-p' => 'page_current',
+  'C-e' => 'edit_current',
+  'C-o' => 'edit_current',
   'D' => 'delete_file',
   'M' => 'file_actions most',
   'q' => 'quit_command', # was Q now q 2019-03-04 -
@@ -626,6 +629,30 @@ def open_file(f)
   end
 end
 
+# regardless of mode, view the current file using pager
+def page_current
+  command = ENV['MANPAGER'] || ENV['PAGER'] || 'less'
+  run_on_current command
+end
+
+# regardless of mode, edit the current file using editor
+def page_current
+  command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
+  run_on_current command
+end
+
+# run given command on current file
+def run_on_current(command)
+  f = $view[$cursor]
+  return unless f
+  return unless File.readable?(f)
+
+  clear_screen
+  reset_terminal
+  comm = "#{command} #{f}"
+  system(comm.to_s)
+  setup_terminal
+end
 ## run command on given file/s
 #   Accepts command from user
 #   After putting readline in place of gets, pressing a C-c has a delayed effect. It goes intot
@@ -1424,7 +1451,9 @@ def file_actions(action = nil)
     menu_text = :quit if ch == 'q'
   end
   case menu_text.to_sym
+
   when :quit
+
   when :delete
     print "rmtrash #{files} ?[yn]: "
     ch = get_char
@@ -1432,6 +1461,7 @@ def file_actions(action = nil)
 
     system "rmtrash #{files}"
     refresh
+
   when :move
     print "move #{text} to : "
     # target = gets().chomp
@@ -1445,6 +1475,7 @@ def file_actions(action = nil)
     else
       perror 'Target not a dir'
     end
+
   when :copy
     print "copy #{text} to : "
     target = Readline.readline('>', true)
@@ -1458,8 +1489,10 @@ def file_actions(action = nil)
       FileUtils.cp text, target
       refresh
     end
+
   when :chdir
     change_dir File.dirname(text)
+
   when :zip
     print 'Archive name: '
     # target = gets().chomp
@@ -1475,7 +1508,9 @@ def file_actions(action = nil)
         refresh
       end
     end
+
   when :rename
+    # 2019-03-07 - TODO
   when :most, :less, :vim
     system "#{menu_text} #{files}"
   else
@@ -1488,12 +1523,15 @@ def file_actions(action = nil)
     refresh
     pause
   end
-  # remove non-existent files from select list due to move or delete or rename or whatever
+
+  # remove non-existent files from select list due to move or delete
+  #  or rename or whatever
   if sct > 0
     $selected_files.select! { |x| x = File.expand_path(x); File.exist?(x) }
   end
 end
 
+# increase or decrease column
 def columns_incdec(howmany)
   $gviscols += howmany.to_i
   $gviscols = 1 if $gviscols < 1
