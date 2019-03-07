@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-07 14:59
+#  Last update: 2019-03-08 00:22
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -601,7 +601,7 @@ def open_file(f)
     save_dir_pos
     change_dir f, nextpos
   elsif File.readable? f
-    $default_command ||= '$EDITOR'
+    $default_command ||= '$PAGER'
     if !$editor_mode
       ft = filetype f
       if ft
@@ -1428,9 +1428,11 @@ end
 
 # currently i am only passing the action in from the list there as a key
 # I should be able to pass in new actions that are external commands
+# 2019-03-08 - TODO when a file name changes or moves it must be removed
+#  from selection
 def file_actions(action = nil)
   h = { d: :delete, m: :move, r: :rename, v: ENV['EDITOR'] || :vim,
-        c: :copy, C: :chdir,
+        c: :copy, C: :chdir, W: :remspace,
         l: :less, s: :most, f: :file, o: :open, x: :dtrx, z: :zip }
   # acttext = h[action.to_sym] || action
   acttext = action || ''
@@ -1453,6 +1455,8 @@ def file_actions(action = nil)
 
     text = file
   end
+  # 2019-03-07 - NOTE at this point file can be one or more files.
+  # 2019-03-07 - text can be a file or count of files, so unreliable !!! FIXME
 
   case file
   when Array
@@ -1469,6 +1473,8 @@ def file_actions(action = nil)
     ch, menu_text = menu "File Menu for #{text}", h
     menu_text = :quit if ch == 'q'
   end
+  return unless menu_text # pressed some wrong key
+
   case menu_text.to_sym
 
   when :quit
@@ -1482,31 +1488,36 @@ def file_actions(action = nil)
     refresh
 
   when :move
+    # 2019-03-07 - NOTE this will only work with single file selection
     print "move #{text} to : "
     # target = gets().chomp
     target = Readline.readline('>', true)
-    text = File.expand_path(text)
+    # 2019-03-07 - NOTE cannot use this if multiple files
+    # text = File.expand_path(text)
+    target = File.expand_path(target)
     return if target == ''
 
     if File.directory? target
-      FileUtils.mv text, target
+      FileUtils.mv file, target
+      # 2019-03-08 - TODO if success remove from selection
       refresh
     else
       perror 'Target not a dir'
     end
 
   when :copy
-    print "copy #{text} to : "
+    # 2019-03-07 - NOTE this will only work with single file selection
+    # Simplify this. Target must be directory
+    print "copy #{text} to (dir): "
     target = Readline.readline('>', true)
+    target = File.expand_path(target)
     return if target == ''
 
-    text = File.expand_path(text)
-    target = File.basename(text) if target == '.'
-    if File.exist? target
-      perror "Target (#{target}) exists"
-    else
-      FileUtils.cp text, target
+    if File.directory? target
+      FileUtils.cp file, target
       refresh
+    else
+      perror 'Copy target must be a dir'
     end
 
   when :chdir
@@ -1529,7 +1540,8 @@ def file_actions(action = nil)
     end
 
   when :rename
-    # 2019-03-07
+    # 2019-03-07 NOTE works for single file FIXME
+    # 2019-03-07 - TODO for n files replace pattern with string
     print "rename #{text} to : "
     target = Readline.readline('>', true)
     return if target == ''
@@ -1544,6 +1556,30 @@ def file_actions(action = nil)
     end
   when :most, :less, :vim
     system "#{menu_text} #{files}"
+    # should we remove from selection ?
+
+  when :remspace
+    # 2019-03-08 - 00:07 added replace space with underscore in filename
+    print 'Remove spaces from file/s'
+    pause
+    farray = nil
+
+    # stupidly using one variable for scalar and array DUH !
+    case file
+    when String
+      farray = [file]
+    when Array
+      farray = file
+    end
+
+    farray.each do |f|
+      if f.index ' '
+        nname = f.tr(' ', '_')
+        FileUtils.mv f, nname unless File.exist? nname
+        # if success then remove from selection
+      end
+    end
+    refresh
   else
     return unless menu_text
 
