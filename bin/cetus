@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-08 19:10
+#  Last update: 2019-03-09 00:08
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -361,7 +361,7 @@ def run
     ## nilling the title means a superimposed one gets cleared.
     # $title = nil
     # split into 2 procedures so columnate can e clean and reused.
-    buff = format $viewport
+    buff = _format $viewport
     buff = columnate buff, $grows
     # needed the next line to see how much extra we were going in padding
     # buff.each {|line| print "#{REVERSE}#{line}#{CLEAR}\n" }
@@ -421,6 +421,7 @@ MEGA_SIZE = 1_048_576.0
 KILO_SIZE = 1024.0
 
 # Return the file size with a readable style.
+# NOTE format is a kernel method.
 def readable_file_size(size, precision)
   if size < KILO_SIZE then format('%d B', size)
   elsif size < MEGA_SIZE then format("%.#{precision}f K", (size / KILO_SIZE))
@@ -501,7 +502,9 @@ def columnate(ary, sz)
 end
 
 ## formats the data with number, mark and details
-def format(ary)
+# 2019-03-09 - at some time this got renamed to `format` which is a kernel
+#  method and this overshadowed that method.
+def _format(ary)
   # buff = Array.new
   buff = Array.new(ary.size)
   return buff if ary.nil? || ary.empty?
@@ -528,7 +531,8 @@ def format(ary)
           last = f[-1]
           stat = File.stat(f.chop) if last == ' ' || last == '@' || last == '*'
         end
-        f = format('%10s  %s  %s', readable_file_size(stat.size, 1), date_format(stat.mtime), f)
+        f = format('%10s  %s  %s', readable_file_size(stat.size, 1),
+                   date_format(stat.mtime), f)
       rescue Exception => e
         f = format('%10s  %s  %s', '?', '??????????', f)
       end
@@ -872,6 +876,8 @@ def prev_page
   $sta -= $pagesize
 end
 
+# print help on key-bindings
+# 2019-03-08 - TODO write to temp file and user PAGER
 def print_help
   clear_screen
   puts 'HELP'
@@ -921,7 +927,30 @@ def main_menu
   menu 'Main Menu', h
 end
 
+# trying out fzf instead
+# 2019-03-08 - 23:46
+# FIXME returns a String not symbol, so some callers can fail
 def menu(title, h)
+  return unless h
+
+  pbold title.to_s
+  values = h.values.join("\n")
+  binding = `echo "#{values}" | fzf --prompt="#{title.to_s} :"`
+  # h.each_pair { |k, v| puts " #{k}: #{v}" }
+  # ch = get_char
+  # binding = h[ch]
+  # binding ||= h[ch.to_sym]
+  # FIXME we have converted symbol to string
+  ch = nil
+  if binding
+    binding = binding.chomp
+    send(binding) if respond_to?(binding, true)
+    ch = h.key(binding)
+  end
+  [ch, binding]
+end
+
+def oldmenu(title, h)
   return unless h
 
   pbold title.to_s
@@ -939,7 +968,7 @@ def toggle_menu
   h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list, '1' => :toggle_columns,
         :p => :toggle_pager_mode, :e => :toggle_enhanced_list }
   ch, menu_text = menu 'Toggle Menu', h
-  case menu_text
+  case menu_text.to_sym
   when :toggle_hidden
     $hidden = $hidden ? nil : 'D'
     refresh
