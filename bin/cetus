@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-09 12:03
+#  Last update: 2019-03-09 14:44
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -560,21 +560,21 @@ def select_hint(view, ch)
   # if x or z take a key IF there are those many
   #
   ix = get_index(ch, view.size)
-  if ix
-    f = view[ix]
-    return unless f
+  return unless ix
 
-    $cursor = $sta + ix
+  f = view[ix]
+  return unless f
 
-    if $mode == 'SEL'
-      toggle_select f
-    elsif $mode == 'COM'
-      run_command f
-    else
-      open_file f
-    end
-    # selectedix=ix
+  $cursor = $sta + ix
+
+  if $mode == 'SEL'
+    toggle_select f
+  elsif $mode == 'COM'
+    run_command f
+  else
+    open_file f
   end
+  # selectedix=ix
 end
 
 ## toggle selection state of file
@@ -901,7 +901,7 @@ def print_help
     file.close
     file.unlink
   end
-end
+end #
 
 def show_marks
   puts
@@ -932,6 +932,7 @@ def main_menu
     :B => :bindkey_ext_command,
     :M => :newdir,
     '%' => :newfile,
+    'S' => :scripts,
     :x => :extras
   }
   menu 'Main Menu', h
@@ -986,7 +987,10 @@ def toggle_menu
   h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list, '1' => :toggle_columns,
         :p => :toggle_pager_mode, :e => :toggle_enhanced_list }
   ch, menu_text = menu 'Toggle Menu', h
-  case menu_text.to_sym
+  # NOTE fzfmenu returns string not symbol
+  return unless menu_text
+
+  case menu_text
   when :toggle_hidden
     $hidden = $hidden ? nil : 'D'
     refresh
@@ -1923,6 +1927,39 @@ def newfile
   $visited_files.insert(0, str) if File.exist?(str)
   refresh
 end
+
+
+
+def current_file
+  $view[$cursor]
+end
+
+def current_or_selected_files
+  return $selected_files if $selected_files.size > 0
+
+  return [current_file]
+end
+
+# ------------------- scripts ------------------ #
+# prompt for scripts to execute, giving selected file names
+def scripts
+  title = 'Select a script'
+  script_path = '~/.config/cetus/scripts'
+  binding = `find #{script_path} -type f | fzf --prompt="#{title.to_s} :"`
+  return unless binding
+
+  binding = binding.chomp if binding
+  # TODO check if binding is a file and executable
+  # xargs only seems to take the first file
+  # cf = current_or_selected_files.join('\0')
+  # cf = Shellwords.join(current_or_selected_files)
+  current_or_selected_files.each do |file|
+    system %( #{binding} "#{file}" )
+  end
+  # system %(echo "#{cf}" | xargs #{binding})
+  pause
+end
+# ------------- end of scripts --------------------------------#
 
 ##
 # Editing of the User Dir List.
