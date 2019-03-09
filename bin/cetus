@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-09 14:44
+#  Last update: 2019-03-09 15:07
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -38,7 +38,8 @@ require 'fileutils'
 system 'tput smcup'
 VERSION = '0.1.21.0'.freeze
 O_CONFIG = true
-CONFIG_FILE = '~/.lyrainfo'.freeze
+# CONFIG_FILE = '~/.lyrainfo'.freeze
+CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 $bindings = {}
 $bindings = {
@@ -1204,22 +1205,14 @@ end
 def config_read
   # f =  File.expand_path("~/.zfminfo")
   f = File.expand_path(CONFIG_FILE)
-  if File.readable? f
-    load f
-    # maybe we should check for these existing else crash will happen.
-    $used_dirs.push(*(DIRS.split ':'))
-    # WARN - what about dirs and files that don't exist any longer
-    $used_dirs.concat get_env_paths
-    $visited_files.push(*(FILES.split ':'))
-    # $bookmarks.push(*bookmarks) if bookmarks
-    chars = ('A'..'Z').to_a
-    chars.concat(('0'..'9').to_a)
-    chars.each do |ch|
-      if Kernel.const_defined? "BM_#{ch}"
-        $bookmarks[ch] = Kernel.const_get "BM_#{ch}"
-      end
-    end
-  end
+  return unless File.readable? f
+
+  hash = loadYML(f)
+  $used_dirs = hash['DIRS']
+  $visited_files = hash['FILES']
+  $bookmarks = hash['BOOKMARKS']
+
+  $used_dirs.concat get_env_paths
 end
 
 def get_env_paths
@@ -1240,20 +1233,30 @@ end
 def config_write
   # Putting it in a format that zfm can also read and write
   f1 = File.expand_path(CONFIG_FILE)
-  d = $used_dirs.join ':'
-  f = $visited_files.join ':'
-  File.open(f1, 'w+') do |f2|
-    # use "\n" for two lines of text
-    f2.puts "DIRS=\"#{d}\""
-    f2.puts "FILES=\"#{f}\""
-    $bookmarks.each_pair do |k, val|
-      f2.puts "BM_#{k}=\"#{val}\""
-      # f2.puts "BOOKMARKS[\"#{k}\"]=\"#{val}\""
-    end
-  end
+  hash = {}
+  hash['DIRS'] = $used_dirs
+  hash['FILES'] = $visited_files
+  hash['BOOKMARKS'] = $bookmarks
+  writeYML hash, f1
   $writing = $modified = false
 end
 
+# {{{ YML
+require 'yaml'
+def loadYML( filename)
+  hash = YAML::load( File.open( filename ) )
+  if $opt_debug
+    $stderr.puts hash.keys.size
+  end
+  return hash
+end
+def writeYML obj, filename
+  File.open(filename, 'w') {|f| f.write obj.to_yaml }
+  if $opt_debug
+    $stderr.puts "Written to file #{filename}"
+  end
+end
+# }}}
 ## accept a character to save this dir as a bookmark
 def create_bookmark
   print 'Enter A to Z or 0-9 for bookmark: '
