@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-09 00:08
+#  Last update: 2019-03-09 12:03
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -877,21 +877,30 @@ def prev_page
 end
 
 # print help on key-bindings
-# 2019-03-08 - TODO write to temp file and user PAGER
+# 2019-03-08 - write to temp file and user PAGER
 def print_help
-  clear_screen
-  puts 'HELP'
-  puts
-  puts 'To open a file or dir press 1-9 a-z A-Z '
-  puts 'Command Mode: Will prompt for a command to run on a file, after selecting using hotkey'
-  puts 'Selection Mode: Each selection adds to selection list (toggles)'
-  puts '                Upon exiting mode, user is prompted for a command to run on selected files'
-  puts
-  ary = []
-  $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
-  ary = columnate ary, $grows - 7
-  ary.each { |line| print line, "\n" }
-  get_char
+  require 'tempfile'
+  file = Tempfile.new('help')
+  begin
+    file.puts '    HELP'
+
+    file.puts
+    file.puts 'To open a file or dir press 1-9 a-z A-Z '
+    file.puts 'Command Mode: Will prompt for a command to run on a file, after selecting using hotkey'
+    file.puts 'Selection Mode: Each selection adds to selection list (toggles)'
+    file.puts '   Execute commands on selected files. e.g D    '
+    file.puts '   Upon exiting mode, user is prompted for a command to run on selected files'
+    file.puts
+    ary = []
+    $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
+    ary = columnate ary, (ary.size/2)+1
+    ary.each { |line| file.puts line }
+    file.flush
+    system "$PAGER #{file.path}"
+  rescue
+    file.close
+    file.unlink
+  end
 end
 
 def show_marks
@@ -907,10 +916,11 @@ end
 # MENU MAIN -- keep consistent with zfm
 def main_menu
   h = {
-    :a => :ack,
+    :a => :ag,
     '/' => :ffind,
     :l => :locate,
-    :v => :viminfo,
+    :V => :viminfo,
+    :v => :vidir,
     :z => :z_interface,
     :d => :child_dirs,
     :r => :recent_files,
@@ -930,7 +940,7 @@ end
 # trying out fzf instead
 # 2019-03-08 - 23:46
 # FIXME returns a String not symbol, so some callers can fail
-def menu(title, h)
+def fzfmenu(title, h)
   return unless h
 
   pbold title.to_s
@@ -950,11 +960,19 @@ def menu(title, h)
   [ch, binding]
 end
 
-def oldmenu(title, h)
+# this style used hotkeys which I remember. But it can get long.
+#  and I have to fix a hotkey for each new entry
+def menu(title, h)
   return unless h
 
   pbold title.to_s
-  h.each_pair { |k, v| puts " #{k}: #{v}" }
+  # h.each_pair { |k, v| puts " #{k}: #{v}" }
+  # 2019-03-09 - trying out using `column` to print in cols
+  ary = []
+  h.each_pair { |k, v| ary << " #{k}: #{v}" }
+  x = ary.join("\n")
+  puts %x{echo "#{x}" | column}
+
   ch = get_char
   binding = h[ch]
   binding ||= h[ch.to_sym]
@@ -1178,6 +1196,7 @@ def post_cd
 end
 
 ## read dirs and files and bookmarks from file
+# TODO why not use yml so we can removed junk/old files
 def config_read
   # f =  File.expand_path("~/.zfminfo")
   f = File.expand_path(CONFIG_FILE)
@@ -1185,6 +1204,7 @@ def config_read
     load f
     # maybe we should check for these existing else crash will happen.
     $used_dirs.push(*(DIRS.split ':'))
+    # WARN - what about dirs and files that don't exist any longer
     $used_dirs.concat get_env_paths
     $visited_files.push(*(FILES.split ':'))
     # $bookmarks.push(*bookmarks) if bookmarks
@@ -1212,9 +1232,9 @@ def get_env_paths
 end
 
 ## save dirs and files and bookmarks to a file
+# TODO move to yml 2019-03-09 -
 def config_write
   # Putting it in a format that zfm can also read and write
-  # f1 =  File.expand_path("~/.zfminfo")
   f1 = File.expand_path(CONFIG_FILE)
   d = $used_dirs.join ':'
   f = $visited_files.join ':'
@@ -1657,16 +1677,15 @@ def bindkey_ext_command
   end
 end
 
-def ack
-  print 'Enter a pattern to search (ack): '
-  # pattern = gets.chomp
+def ag
+  print 'Enter a pattern to search (ag): '
   pattern = Readline.readline('>', true)
   return if pattern == ''
 
-  $title = "Files found using 'ack' #{pattern}"
-  system("ack #{pattern}")
+  $title = "Files found using 'ag' #{pattern}"
+  system("ag #{pattern}")
   pause
-  files = `ack -l #{pattern}`.split("\n")
+  files = `ag -l #{pattern}`.split("\n")
   if files.empty?
     perror 'No files found.'
   else
@@ -1731,6 +1750,9 @@ def z_interface
   end
 end
 
+def vidir
+  system "vidir"
+end
 ## there is no one consisten way i am getting.
 #  i need to do a shell join if I am to pipe ffiles to say: xargs ls -t
 #  but if i want to pipe names to grep xxx then i need to join with newlines
