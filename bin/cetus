@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-09 15:07
+#  Last update: 2019-03-10 09:43
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2013 rahul kumar
 # == CHANGELOG
@@ -644,15 +644,17 @@ def page_current
 end
 
 # regardless of mode, edit the current file using editor
-def page_current
+def edit_current
   command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
   run_on_current command
+  $visited_files.insert(0, current_file)
 end
 
 # run given command on current file
 def run_on_current(command)
   f = $view[$cursor]
   return unless f
+  f = File.expand_path(f)
   return unless File.readable?(f)
 
   clear_screen
@@ -661,6 +663,7 @@ def run_on_current(command)
   system(comm.to_s)
   setup_terminal
 end
+
 ## run command on given file/s
 #   Accepts command from user
 #   After putting readline in place of gets, pressing a C-c has a delayed effect. It goes intot
@@ -925,6 +928,8 @@ def main_menu
     :z => :z_interface,
     :d => :child_dirs,
     :r => :recent_files,
+    '1' => :select_visited_files,
+    '2' => :select_used_dirs,
     :t => :dirtree,
     '4' => :tree,
     :s => :sort_menu,
@@ -1007,7 +1012,7 @@ def toggle_menu
   when :toggle_pager_mode
     $editor_mode = !$editor_mode
     $default_command = if $editor_mode
-                         nil
+                         ENV['EDITOR'] # earlier nil # 2019-03-10 -
                        else
                          ENV['MANPAGER'] || ENV['PAGER']
                        end
@@ -1154,13 +1159,15 @@ end
 
 def select_used_dirs
   $title = 'Used Directories'
-  $files = $used_dirs.uniq
+  home = File.expand_path '~'
+  $files = $used_dirs.uniq.map { |path| path.sub("#{home}", '~') }
 end
 
 def select_visited_files
   # not yet a unique list, needs to be unique and have latest pushed to top
   $title = 'Visited Files'
-  $files = $visited_files.uniq
+  home = File.expand_path '~'
+  $files = $visited_files.uniq.map { |path| path.sub("#{home}", '~') }
 end
 
 def select_bookmarks
@@ -1189,6 +1196,7 @@ def post_cd
   $patt = nil
   $sta = $cursor = 0
   $title = nil
+  # 2019-03-10 - why am I clearing selected when dir changed !!! FIXME
   $selected_files = [] unless $selected_files.empty?
   $visual_block_start = nil
   $stact = 0
@@ -1201,7 +1209,6 @@ def post_cd
 end
 
 ## read dirs and files and bookmarks from file
-# TODO why not use yml so we can removed junk/old files
 def config_read
   # f =  File.expand_path("~/.zfminfo")
   f = File.expand_path(CONFIG_FILE)
@@ -1211,7 +1218,6 @@ def config_read
   $used_dirs = hash['DIRS']
   $visited_files = hash['FILES']
   $bookmarks = hash['BOOKMARKS']
-
   $used_dirs.concat get_env_paths
 end
 
@@ -1229,13 +1235,13 @@ def get_env_paths
 end
 
 ## save dirs and files and bookmarks to a file
-# TODO move to yml 2019-03-09 -
+# - moved to yml 2019-03-09
 def config_write
   # Putting it in a format that zfm can also read and write
   f1 = File.expand_path(CONFIG_FILE)
   hash = {}
-  hash['DIRS'] = $used_dirs
-  hash['FILES'] = $visited_files
+  hash['DIRS'] = $used_dirs.select {|dir| File.exist? dir}
+  hash['FILES'] = $visited_files.select {|file| File.exist? file}
   hash['BOOKMARKS'] = $bookmarks
   writeYML hash, f1
   $writing = $modified = false
@@ -1349,11 +1355,11 @@ def tree
 end
 
 # lists recent files in current dir
-# TODO in some cases it shows mostly .git files, we need to prune those
+# In some cases it shows mostly .git files, we need to prune those
 def recent_files
   # print -rl -- **/*(Dom[1,10])
   $title = 'Recent files'
-  $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n")
+  $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n").reject {|f| f[0] == '.'}
 end
 
 def select_current
@@ -1536,11 +1542,12 @@ def file_actions(action = nil)
   when :quit
 
   when :delete
-    print "rmtrash #{files} ?[yn]: "
+    delcommand = 'rmtrash'
+    print "#{delcommand} #{files} ?[yn]: "
     ch = get_char
     return if ch != 'y'
 
-    system "rmtrash #{files}"
+    system "#{delcommand} #{files}"
     refresh
 
   when :move
@@ -1548,7 +1555,7 @@ def file_actions(action = nil)
     print "move #{text} to : "
     # target = gets().chomp
     target = Readline.readline('>', true)
-    # 2019-03-07 - NOTE cannot use this if multiple files
+    # 2019-03-07 - NOTE cannot use text if multiple files
     # text = File.expand_path(text)
     target = File.expand_path(target)
     return if target == ''
@@ -1564,13 +1571,13 @@ def file_actions(action = nil)
   when :copy
     # 2019-03-07 - NOTE this will only work with single file selection
     # Simplify this. Target must be directory
-    print "copy #{text} to (dir): "
+    print "copy #{files} to (dir): "
     target = Readline.readline('>', true)
     target = File.expand_path(target)
     return if target == ''
 
     if File.directory? target
-      FileUtils.cp file, target
+      FileUtils.cp files, target
       refresh
     else
       perror 'Copy target must be a dir'
@@ -1616,7 +1623,7 @@ def file_actions(action = nil)
 
   when :remspace
     # 2019-03-08 - 00:07 added replace space with underscore in filename
-    print 'Remove spaces from file/s'
+    print "Remove spaces from #{file}"
     pause
     farray = nil
 
@@ -1975,10 +1982,13 @@ def remove_from_list
     ch = get_char
     return if ch != 'y'
 
-    $used_dirs = $used_dirs - $selected_files
-    $visited_files = $visited_files - $selected_files
+    arr = $selected_files.map { |path| File.expand_path(path) }
+
+    $used_dirs = $used_dirs - arr
+    $visited_files = $visited_files - arr
     unselect_all
     $modified = true
+    refresh
     return
   end
   print
