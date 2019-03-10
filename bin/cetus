@@ -6,14 +6,15 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-10 09:43
+#  Last update: 2019-03-10 15:07
 # --------------------------------------------------------------------------- #
-#  cetus.rb  Copyright (C) 2012-2013 rahul kumar
+#  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
 # 2019-02-20 - added smcup and rmcup so alt-screen is used. works a bit
 # 2019-03-04 - change clear to go to 0,0 and clear down to reduce pollution
 # 2019-03-04 - changed quit to q (earlier Q)
 # 2019-03-04 - first dirs then files
+# 2019-03-10 - changing selected_files to have fullpath
 #  == TODO
 #  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
@@ -26,8 +27,6 @@ require 'shellwords'
 # https://docs.ruby-lang.org/en/2.6.0/FileUtils.html
 require 'fileutils'
 # -- requires 1.9.3 for io/wait
-# -- cannot do with Highline since we need a timeout on wait,
-#   not sure if HL can do that
 
 ## INSTALLATION
 # copy into PATH
@@ -36,7 +35,7 @@ require 'fileutils'
 
 # 2019-02-20 - added so alt-screen is used
 system 'tput smcup'
-VERSION = '0.1.21.0'.freeze
+VERSION = '0.1.22.0'.freeze
 O_CONFIG = true
 # CONFIG_FILE = '~/.lyrainfo'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
@@ -52,7 +51,7 @@ $bindings = {
   ',' => 'goto_parent_dir',
   '~' => 'goto_home_dir',
   '-' => 'goto_previous_dir', # 2019-03-07 - added. like 'cd ='
-  '+' => 'goto_dir',       # 2019-03-07 - TODO change binding
+  '+' => 'goto_dir',       # 2019-03-07 - TODO: change binding
   '.' => 'pop_dir',
   ':' => 'subcommand',
   "'" => 'goto_bookmark',
@@ -202,6 +201,16 @@ def setup_terminal
 
   # Hide echoing of user input
   system 'stty -echo'
+end
+
+# wrap readline so C-c can be ignored, but blank is taken as default
+def readline
+  begin
+    target = Readline.readline('>', true)
+  rescue Interrupt
+    return nil
+  end
+  target
 end
 
 ## get a character from user and return as a string
@@ -522,7 +531,9 @@ def _format(ary)
     mark = SPACE
     cur = SPACE
     cur = CURMARK if ix + $sta == $cursor
-    mark = GMARK if $selected_files.index(ary[ix])
+    # TODO: add full path TESTME
+    # mark = GMARK if $selected_files.index(ary[ix])
+    mark = GMARK if selected?(ary[ix])
 
     if $long_listing
       begin
@@ -541,7 +552,8 @@ def _format(ary)
 
     s = "#{ind}#{mark}#{cur}#{f}"
     # I cannot color the current line since format does the chopping
-    # so not only does the next lines alignment get skeweed, but also if the line is truncated
+    # so not only does the next lines alignment get skewed,
+    # but also if the line is truncated
     # then the color overflows.
     # if ix + $sta == $cursor
     # s = "#{RED}#{s}#{CLEAR}"
@@ -580,10 +592,12 @@ end
 
 ## toggle selection state of file
 def toggle_select(f)
-  if $selected_files.index f
-    $selected_files.delete f
+  # dir = Dir.pwd
+  # file = File.join(dir, f)
+  if selected? f
+    remove_from_selection f
   else
-    $selected_files.push f
+    add_to_selection f
   end
 end
 
@@ -761,7 +775,9 @@ end
 
 ## select all files
 def select_all
-  $selected_files = $view.dup
+  # TODO: add path TESTME
+  dir = Dir.pwd
+  $selected_files = $view.map { |file| File.join(dir, file) }
 end
 
 ## accept dir to goto and change to that ( can be a file too)
@@ -1074,13 +1090,14 @@ def command_menu
   # should be able to sort THIS listing and not rerun command. But for that I'd need to use
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
-  h = { t: :today, D: :default_command, R: :remove_from_list }
+  h = { t: :today, D: :default_command, R: :remove_from_list,
+        v: :page_selection }
   h[:e] = if $editor_mode
             :pager_mode
           else
             :editor_mode
           end
-  ch, menu_text = menu 'Command Menu', h
+  _, menu_text = menu 'Command Menu', h
   case menu_text
   when :pager_mode
     $editor_mode = false
@@ -1197,9 +1214,10 @@ def post_cd
   $sta = $cursor = 0
   $title = nil
   # 2019-03-10 - why am I clearing selected when dir changed !!! FIXME
-  $selected_files = [] unless $selected_files.empty?
+  # $selected_files = [] unless $selected_files.empty?
   $visual_block_start = nil
   $stact = 0
+  $current_dir = Dir.pwd # 2019-03-10 - so i don't keep doing in functions
   screen_settings
   # i think this will screw with the dir_pos since it is not filename based.
   enhance_file_list
@@ -1554,14 +1572,22 @@ def file_actions(action = nil)
     # 2019-03-07 - NOTE this will only work with single file selection
     print "move #{text} to : "
     # target = gets().chomp
-    target = Readline.readline('>', true)
+    # target = Readline.readline('>', true)
+    target = readline
+    return unless target
+
+    target = '.' if target == ''
     # 2019-03-07 - NOTE cannot use text if multiple files
     # text = File.expand_path(text)
     target = File.expand_path(target)
     return if target == ''
 
     if File.directory? target
-      FileUtils.mv file, target
+      begin
+        FileUtils.mv file, target
+      rescue StandardError => exc
+        perror exc.to_s
+      end
       # 2019-03-08 - TODO if success remove from selection
       refresh
     else
@@ -1569,15 +1595,21 @@ def file_actions(action = nil)
     end
 
   when :copy
-    # 2019-03-07 - NOTE this will only work with single file selection
-    # Simplify this. Target must be directory
-    print "copy #{files} to (dir): "
-    target = Readline.readline('>', true)
+    # Target must be directory
+    print "copy #{text} to : "
+    target = readline
+    return unless target # C-c
+
+    target = '.' if target == ''
     target = File.expand_path(target)
     return if target == ''
 
     if File.directory? target
-      FileUtils.cp files, target
+      begin
+        FileUtils.cp file, target
+      rescue StandardError => exc
+        perror exc.to_s
+      end
       refresh
     else
       perror 'Copy target must be a dir'
@@ -1804,14 +1836,52 @@ def moveto(pos)
   fin = [orig, $cursor].max
   if $visual_mode
     # PWD has to be there in selction
-    if $selected_files.index $view[$cursor]
+    # TODO: add full path TESTME
+    if selected? current_file
       # this depends on the direction
-      $selected_files = $selected_files - $view[star..fin]
+      # $selected_files = $selected_files - $view[star..fin]
+      remove_from_selection $view[star..fin]
       ## current row remains in selection always.
-      $selected_files.push $view[$cursor]
+      add_to_selection current_file
     else
-      $selected_files.concat $view[star..fin]
+      # $selected_files.concat $view[star..fin]
+      add_to_selection $view[star..fin]
     end
+  end
+end
+
+# is given file in selected array
+def selected?(file)
+  $current_dir ||= Dir.pwd
+  file = File.join($current_dir, file)
+  return $selected_files.index file
+end
+
+# TODO: can be array
+def add_to_selection(file)
+  ff = file
+  case file
+  when String
+    ff = [file]
+  end
+  $current_dir ||= Dir.pwd
+  ff.each do |f|
+    full = File.join($current_dir, f)
+    $selected_files.push full
+  end
+end
+
+# TODO: can be array
+def remove_from_selection(file)
+  ff = file
+  case file
+  when String
+    ff = [file]
+  end
+  $current_dir ||= Dir.pwd
+  ff.each do |f|
+    full = File.join($current_dir, f)
+    $selected_files.delete full
   end
 end
 
@@ -1819,7 +1889,9 @@ def visual_mode_toggle
   $visual_mode = !$visual_mode
   if $visual_mode
     $visual_block_start = $cursor
-    $selected_files.push $view[$cursor]
+    # TODO: add full path TESTME
+    # $selected_files.push $view[$cursor]
+    add_to_selection current_file
   end
 end
 
@@ -1827,7 +1899,9 @@ def visual_block_clear
   if $visual_block_start
     star = [$visual_block_start, $cursor].min
     fin = [$visual_block_start, $cursor].max
-    $selected_files = $selected_files - $view[star..fin]
+    # TODO: add full path TESTME
+    # $selected_files = $selected_files - $view[star..fin]
+    remove_from_selection $view[star..fin]
   end
   $visual_block_start = nil
   $visual_mode = nil
@@ -1933,7 +2007,10 @@ def newfile
   str = Readline.readline('>', true)
   return if str == ''
 
-  system "$EDITOR #{str}"
+  # FIXME a file with space will not create single file
+  # 2019-03-10 - maybe touch a file
+
+  system %($EDITOR "#{str}")
   $visited_files.insert(0, str) if File.exist?(str)
   refresh
 end
@@ -1959,7 +2036,7 @@ def scripts
   return unless binding
 
   binding = binding.chomp if binding
-  # TODO check if binding is a file and executable
+  # TODO: check if binding is a file and executable
   # xargs only seems to take the first file
   # cf = current_or_selected_files.join('\0')
   # cf = Shellwords.join(current_or_selected_files)
@@ -1971,6 +2048,20 @@ def scripts
 end
 # ------------- end of scripts --------------------------------#
 
+# ------------------- page_selection ------------------ #
+def page_selection
+  require 'tempfile'
+  file = Tempfile.new('selected_files')
+  begin
+    $selected_files.each { |row| file.puts row }
+    file.flush
+    system "$PAGER #{file.path}"
+  rescue
+    file.close
+    file.unlink
+  end
+end
+# ------------- end of page_selection --------------------------------#
 ##
 # Editing of the User Dir List.
 # remove current entry from used dirs list, since we may not want some entries being there
