@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-10 15:07
+#  Last update: 2019-03-16 09:53
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -44,10 +44,16 @@ $bindings = {}
 $bindings = {
   '`' => 'main_menu',
   '=' => 'toggle_menu',
-  '!' => 'command_mode',
+  'M-y' => 'selection_menu',
+  'ENTER' => 'select_current',
+  'C-p' => 'page_current',
+  'C-e' => 'edit_current',
+  'C-o' => 'edit_current',
+  'C-s' => 'toggle_select',
   '@' => 'selection_mode_toggle',
   'M-a' => 'select_all',
   'M-A' => 'unselect_all',
+  '!' => 'execute',
   ',' => 'goto_parent_dir',
   '~' => 'goto_home_dir',
   '-' => 'goto_previous_dir', # 2019-03-07 - added. like 'cd ='
@@ -61,18 +67,14 @@ $bindings = {
   'SPACE' => 'next_page',
   'M-f' => 'select_visited_files',
   'M-d' => 'select_used_dirs',
-  'M-b' => 'select_bookmarks',
+  'M-b' => 'bookmark_menu',
   'M-m' => 'create_bookmark',
-  'M-M' => 'show_marks',
+  'M-M' => 'view_bookmarks',
   'C-c' => 'escape',
   'ESCAPE' => 'escape',
   'TAB' => 'views',
   'C-i' => 'views',
-  '?' => 'dirtree',
-  'ENTER' => 'select_current',
-  'C-p' => 'page_current',
-  'C-e' => 'edit_current',
-  'C-o' => 'edit_current',
+  # '?' => 'dirtree',
   'D' => 'delete_file',
   'M' => 'file_actions most',
   'q' => 'quit_command', # was Q now q 2019-03-04 -
@@ -92,7 +94,7 @@ $bindings = {
   'DOWN' => 'cursor_dn',
   'C-SPACE' => 'visual_mode_toggle',
 
-  'M-?' => 'print_help',
+  '?' => 'print_help',
   'F1' => 'print_help',
   'F2' => 'child_dirs',
   'F3' => 'dirtree',
@@ -326,9 +328,9 @@ $viewctr = 0
 $history = []
 $sta = $cursor = 0
 $visual_mode = false
-# $help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Command Mode  #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
+# $help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Execute #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
 
-$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Command   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit "
+$help = "#{BOLD}M-?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit "
 
 ## main loop which calls all other programs
 def run
@@ -591,7 +593,7 @@ def select_hint(view, ch)
 end
 
 ## toggle selection state of file
-def toggle_select(f)
+def toggle_select(f=current_file)
   # dir = Dir.pwd
   # file = File.join(dir, f)
   if selected? f
@@ -680,8 +682,9 @@ end
 
 ## run command on given file/s
 #   Accepts command from user
-#   After putting readline in place of gets, pressing a C-c has a delayed effect. It goes intot
-#   exception bloack after executing other commands and still does not do the return !
+#   After putting readline in place of gets, pressing a C-c has a delayed effect.
+#   It goes into exception block after executing other commands and still
+#   does not do the return !
 def run_command(f)
   files = nil
   case f
@@ -719,6 +722,10 @@ end
 
 ## cd to a dir
 def change_dir(f, pos = nil)
+  unless File.directory? f
+    perror "#{p} is not a directory, or does not exist."
+    return
+  end
   $visited_dirs.insert(0, Dir.pwd)
   f = File.expand_path(f)
   Dir.chdir f
@@ -815,7 +822,8 @@ end
 def selection_mode_toggle
   if $mode == 'SEL'
     # we seem to be coming out of select mode with some files
-    run_command $selected_files unless $selected_files.empty?
+    # run_command $selected_files unless $selected_files.empty?
+    unselect_all
     $mode = nil
   else
     # $selection_mode = !$selection_mode
@@ -824,6 +832,9 @@ def selection_mode_toggle
 end
 
 ## toggle command mode
+# 2019-03-15 - TODO FIXME preferable when we go into command mode
+#  run a command on current or selected files. But then is it a mode, do we remain
+#  there, or come out immediately ?
 def command_mode
   if $mode == 'COM'
     $mode = nil
@@ -854,6 +865,8 @@ def goto_entry_starting_with(fc = nil)
   $patt = "^#{fc}"
 end
 
+# Goes to directory bookmarked with number or upper case char.
+# If lower case character given, then go to first file starting with char.
 def goto_bookmark(ch = nil)
   unless ch
     print 'Enter bookmark char: '
@@ -906,10 +919,9 @@ def print_help
 
     file.puts
     file.puts 'To open a file or dir press 1-9 a-z A-Z '
-    file.puts 'Command Mode: Will prompt for a command to run on a file, after selecting using hotkey'
     file.puts 'Selection Mode: Each selection adds to selection list (toggles)'
-    file.puts '   Execute commands on selected files. e.g D    '
-    file.puts '   Upon exiting mode, user is prompted for a command to run on selected files'
+    file.puts '   Execute commands on selected files. e.g D C-x   '
+    file.puts '   Upon exiting mode, selection is cleared'
     file.puts
     ary = []
     $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
@@ -923,7 +935,7 @@ def print_help
   end
 end #
 
-def show_marks
+def view_bookmarks
   puts
   puts 'Bookmarks: '
   $bookmarks.each_pair { |k, v| puts "#{k.ljust(7)}  =>  #{v}" }
@@ -951,6 +963,8 @@ def main_menu
     :s => :sort_menu,
     :F => :filter_menu,
     :c => :command_menu,
+    :b => :bookmark_menu,
+    :y => :selection_menu,
     :B => :bindkey_ext_command,
     :M => :newdir,
     '%' => :newfile,
@@ -958,6 +972,27 @@ def main_menu
     :x => :extras
   }
   menu 'Main Menu', h
+end
+
+def selection_menu
+  h = {
+    :a => :select_all,
+    :u => :unselect_all,
+    :s => :toggle_select,
+    '@' => 'selection_mode_toggle',
+    'x' => 'visual_mode_toggle',
+    :v => :view_selected_files
+  }
+  menu 'Selection Menu', h
+end
+
+def bookmark_menu
+  h = {
+    :v => :view_bookmarks,
+    :c => :create_bookmark,
+    :g => :goto_bookmark
+  }
+  menu 'Bookmark Menu', h
 end
 
 # trying out fzf instead
@@ -1015,20 +1050,24 @@ def toggle_menu
   case menu_text
   when :toggle_hidden
     $hidden = $hidden ? nil : 'D'
+    pause "Hidden is now #{$hidden}"
     refresh
   when :toggle_case
     # $ignorecase = $ignorecase ? "" : "i"
     $ignorecase = !$ignorecase
+    pause "Ignore Case  is now #{$ignorecase}"
     refresh
   when :toggle_columns
     $gviscols = 3 if $gviscols == 1
     # $long_listing = false if $gviscols > 1
     x = $grows * $gviscols
     $pagesize = $pagesize == x ? $grows : x
+    pause "Visible columns now set to #{$gviscols}"
   when :toggle_pager_mode
     $editor_mode = !$editor_mode
     $default_command = if $editor_mode
                          ENV['EDITOR'] # earlier nil # 2019-03-10 -
+                         # it was nil so we could set a default command
                        else
                          ENV['MANPAGER'] || ENV['PAGER']
                        end
@@ -1080,18 +1119,17 @@ def sort_menu
   # $files =$(eval "print -rl -- ${pattern}(${MFM_LISTORDER}$filterstr)")
 end
 
+# thse need to be placed in correct position, some do nothing
+#  and some like ffind have no menu item
 def command_menu
-  ##
   #  since these involve full paths, we need more space, like only one column
-  #
   ## in these cases, getting back to the earlier dir, back to earlier listing
   # since we've basically overlaid the old listing
-  #
   # should be able to sort THIS listing and not rerun command. But for that I'd need to use
   # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
   #
   h = { t: :today, D: :default_command, R: :remove_from_list,
-        v: :page_selection }
+        v: :view_selected_files }
   h[:e] = if $editor_mode
             :pager_mode
           else
@@ -1113,7 +1151,9 @@ def command_menu
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
     $title = "Today's files"
   when :default_command
-    print 'Selecting a file usually invokes $EDITOR, what command do you want to use repeatedly on selected files: '
+    puts " THis no longer works"
+    puts 'Selecting a file usually invokes $EDITOR'
+    puts 'What command do you want to use repeatedly on selected files: '
     $default_command = gets.chomp
     if $default_command != ''
       print 'Second part of command (maybe blank): '
@@ -1126,6 +1166,7 @@ def command_menu
   end
 end
 
+# This is quite badly placed and named. Maybe these should go elsewhere
 def extras
   h = { '1' => :one_column, '2' => :multi_column, :c => :columns, :r => :config_read, :w => :config_write }
   ch, menu_text = menu 'Extras Menu', h
@@ -1213,8 +1254,6 @@ def post_cd
   $patt = nil
   $sta = $cursor = 0
   $title = nil
-  # 2019-03-10 - why am I clearing selected when dir changed !!! FIXME
-  # $selected_files = [] unless $selected_files.empty?
   $visual_block_start = nil
   $stact = 0
   $current_dir = Dir.pwd # 2019-03-10 - so i don't keep doing in functions
@@ -1260,7 +1299,8 @@ def config_write
   hash = {}
   hash['DIRS'] = $used_dirs.select {|dir| File.exist? dir}
   hash['FILES'] = $visited_files.select {|file| File.exist? file}
-  hash['BOOKMARKS'] = $bookmarks
+  # NOTE bookmarks is a hash and contains FILE:cursor_pos
+  hash['BOOKMARKS'] = $bookmarks #.select {|file| File.exist? file}
   writeYML hash, f1
   $writing = $modified = false
 end
@@ -1283,7 +1323,7 @@ end
 # }}}
 ## accept a character to save this dir as a bookmark
 def create_bookmark
-  print 'Enter A to Z or 0-9 for bookmark: '
+  print 'Enter A to Z or 0-9 to create a bookmark: '
   ch = get_char
   if ch =~ /^[0-9A-Z]$/
     $bookmarks[ch] = "#{Dir.pwd}:#{$cursor}"
@@ -1293,10 +1333,12 @@ def create_bookmark
   end
 end
 
+# allow user to exit using :q :wq :x
+# Was this supposed to be augmented, or just remain limited like this
+# We should be able to do everything in the menus from here. TODO
 def subcommand
-  print 'Enter command: '
+  print 'Enter command: q x wq p w e r h '
   begin
-    # command = gets().chomp
     command = Readline.readline('>', true)
     return if command == ''
   rescue Exception => ex
@@ -1321,12 +1363,20 @@ def subcommand
   elsif command == 'wq'
     $quitting = true
     $writing = true
+  elsif command == 'w'
+    config_write
   elsif command == 'x'
     $quitting = true
     $writing = true if $modified
+  elsif command == 'e'
+    edit_current
+  elsif command == 'h' or command == 'help' or command = '?'
+    print_help
   elsif command == 'p'
     system 'echo $PWD | pbcopy'
     puts 'Stored PWD in clipboard (using pbcopy)'
+  else
+    perror "Don't know about command #{command}. Try :h or :help"
   end
 end
 
@@ -1511,8 +1561,9 @@ end
 # 2019-03-08 - TODO when a file name changes or moves it must be removed
 #  from selection
 def file_actions(action = nil)
+  # only add dtrx for gz
   h = { d: :delete, m: :move, r: :rename, v: ENV['EDITOR'] || :vim,
-        c: :copy, C: :chdir, W: :remspace,
+        c: :copy, C: :chdir, W: :remspace, e: :execute,
         l: :less, s: :most, f: :file, o: :open, x: :dtrx, z: :zip }
   # acttext = h[action.to_sym] || action
   acttext = action || ''
@@ -1561,8 +1612,9 @@ def file_actions(action = nil)
 
   when :delete
     delcommand = 'rmtrash'
-    print "#{delcommand} #{files} ?[yn]: "
+    print "#{delcommand} #{text} ?[yn?]: "
     ch = get_char
+    view_selected_files if ch == '?'
     return if ch != 'y'
 
     system "#{delcommand} #{files}"
@@ -1675,6 +1727,8 @@ def file_actions(action = nil)
       end
     end
     refresh
+  when :execute
+    execute
   else
     return unless menu_text
 
@@ -1723,6 +1777,15 @@ def bindkey_ext_command
   end
 end
 
+# execute a command on selected or current file
+def execute
+  if $selected_files.empty?
+    run_command current_file
+    return
+  end
+  run_command $selected_files
+end
+
 def ag
   print 'Enter a pattern to search (ag): '
   pattern = Readline.readline('>', true)
@@ -1733,10 +1796,10 @@ def ag
   pause
   files = `ag -l #{pattern}`.split("\n")
   if files.empty?
-    perror 'No files found.'
-  else
-    $files = files
+    perror 'No files found for #{pattern}.'
+    return
   end
+  $files = files
 end
 
 def ffind
@@ -1745,9 +1808,9 @@ def ffind
   return if pattern == ''
 
   $title = "Files found using 'find' #{pattern}"
-  files = `find . -name '#{pattern}'`.split("\n")
+  files = `find . -name "#{pattern}"`.split("\n")
   if files.empty?
-    perror 'No files found.'
+    perror 'No files found. Try adding *'
   else
     $files = files
   end
@@ -1867,7 +1930,7 @@ def add_to_selection(file)
   $current_dir ||= Dir.pwd
   ff.each do |f|
     full = File.join($current_dir, f)
-    $selected_files.push full
+    $selected_files.push(full) unless $selected_files.include?(full)
   end
 end
 
@@ -2048,8 +2111,8 @@ def scripts
 end
 # ------------- end of scripts --------------------------------#
 
-# ------------------- page_selection ------------------ #
-def page_selection
+# ------------------- view_selected_files ------------------ #
+def view_selected_files
   require 'tempfile'
   file = Tempfile.new('selected_files')
   begin
@@ -2061,7 +2124,7 @@ def page_selection
     file.unlink
   end
 end
-# ------------- end of page_selection --------------------------------#
+# ------------- end of view_selected_files --------------------------------#
 ##
 # Editing of the User Dir List.
 # remove current entry from used dirs list, since we may not want some entries being there
