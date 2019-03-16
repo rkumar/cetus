@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-16 14:47
+#  Last update: 2019-03-16 23:49
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -368,20 +368,29 @@ def run
     fin = $sta + $viewport.size
     $title ||= Dir.pwd.sub(home, '~')
     clear_screen
+
+
     # title
     print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
     t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
     t = t[t.size - $gcols..-1] if t.size >= $gcols
     print "#{BOLD}#{t}#{CLEAR}\n"
+
+
     ## nilling the title means a superimposed one gets cleared.
     # $title = nil
     # split into 2 procedures so columnate can e clean and reused.
     buff = _format $viewport
+
+    # break into as many columns as required
     buff = columnate buff, $grows
+
     # needed the next line to see how much extra we were going in padding
     # buff.each {|line| print "#{REVERSE}#{line}#{CLEAR}\n" }
     buff.each { |line| print line, "\n" }
     print
+
+
     # prompt
     # print "#{$files.size}, #{view.size} sta=#{sta} (#{patt}): "
     _mm = ''
@@ -489,18 +498,35 @@ def columnate(ary, sz)
     while ctr < sz
 
       f = ary[ix]
+      linecolor = nil
+      # f is not just filename but marker and hint
+      linecolor = BLUE if f[-1] == '/'
       fsz = f.size
       if fsz > wid
         f = f[0, wid - 2] + '$ '
         ## we do the coloring after trunc so ANSI escpe seq does not get get
-        f = "#{CURSOR_COLOR}#{f}#{CLEAR}" if ix + $sta == $cursor
+        if ix + $sta == $cursor
+          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+        else
+          f = "#{linecolor}#{f}#{CLEAR}"  if linecolor
+        end
+
       else
-        ## we do the coloring before padding so the entire line does not get padded, only file name
-        f = "#{CURSOR_COLOR}#{f}#{CLEAR}" if ix + $sta == $cursor
+
+        ## we do the coloring before padding so the entire line does not get
+        # padded, only file name
+        # f = "#{CURSOR_COLOR}#{f}#{CLEAR}" if ix + $sta == $cursor
+        if ix + $sta == $cursor
+          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+        else
+          f = "#{linecolor}#{f}#{CLEAR}"  if linecolor
+        end
         # f = f.ljust(wid)
         f << ' ' * (wid - fsz)
+
       end
 
+      # if already a value in that line, append to it
       if buff[ctr]
         buff[ctr] += f
       else
@@ -519,6 +545,8 @@ end
 ## formats the data with number, mark and details
 # 2019-03-09 - at some time this got renamed to `format` which is a kernel
 #  method and this overshadowed that method.
+#  NOTE: this does not do any coloring since the codes may get chopped by
+#   columnate method
 def _format(ary)
   # buff = Array.new
   buff = Array.new(ary.size)
@@ -545,6 +573,7 @@ def _format(ary)
         if File.exist? f
           stat = File.stat(f)
         else
+          # remove last character and get stat
           last = f[-1]
           stat = File.stat(f.chop) if last == ' ' || last == '@' || last == '*'
         end
@@ -556,7 +585,8 @@ def _format(ary)
     end
 
     s = "#{ind}#{mark}#{cur}#{f}"
-    # I cannot color the current line since format does the chopping
+
+    # NOTE: I cannot color the current line since _format does the chopping
     # so not only does the next lines alignment get skewed,
     # but also if the line is truncated
     # then the color overflows.
@@ -772,6 +802,7 @@ def refresh
   $title = nil
 end
 
+# put directories first, then files
 def sort_file_list(_files)
   _dirs = $files.select { |f| File.directory?(f) }
   _files = $files.select { |f| File.file?(f) }
