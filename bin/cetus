@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-17 11:16
+#  Last update: 2019-03-17 12:52
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -755,7 +755,7 @@ def run_command(f)
   get_char
 end
 
-## cd to a dir
+## cd to a dir and go to position if specified
 def change_dir(f, pos = nil)
   unless File.directory? f
     perror "#{p} is not a directory, or does not exist."
@@ -1380,7 +1380,8 @@ def create_bookmark
   print 'Enter A to Z or 0-9 to create a bookmark: '
   ch = get_char
   if ch =~ /^[0-9A-Z]$/
-    $bookmarks[ch] = "#{Dir.pwd}:#{$cursor}"
+    # $bookmarks[ch] = "#{Dir.pwd}:#{$cursor}"
+    $bookmarks[ch] = Dir.pwd
     $modified = true
   else
     perror 'Bookmark must be upper-case character or number.'
@@ -1958,7 +1959,6 @@ def moveto(pos)
   fin = [orig, $cursor].max
   if $visual_mode
     # PWD has to be there in selction
-    # TODO: add full path TESTME
     if selected? current_file
       # this depends on the direction
       # $selected_files = $selected_files - $view[star..fin]
