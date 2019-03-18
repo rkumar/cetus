@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-18 14:47
+#  Last update: 2019-03-19 00:27
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -50,6 +50,7 @@ $bindings = {
   'C-o' => 'edit_current',
   'C-s' => 'toggle_select',
   'C-r' => 'reduce',
+  'C-g' => 'debug_vars',
   '@' => 'selection_mode_toggle',
   'M-a' => 'select_all',
   'M-A' => 'unselect_all',
@@ -280,9 +281,9 @@ $mode = nil
 $glines = `tput lines`.to_i
 $gcols = `tput cols`.to_i
 $grows = $glines - 3  # can be a func
-$pagesize = 60
+# $pagesize = 60
 $gviscols = 3
-$pagesize = $grows * $gviscols
+$pagesize = $grows * $gviscols # can be a func
 $stact = 0
 # $editor_mode = true
 $editor_mode = false # changed 2018-03-12 - so we start in pager mode
@@ -362,6 +363,8 @@ def run
             end
     fl = $view.size
     $sta = 0 if $sta >= fl || $sta < 0
+    # 2019-03-18 - added to ensure cursor not going OOB when next_page
+    $cursor = 0 if $cursor >= fl || $cursor < 0
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
     $title ||= Dir.pwd.sub(home, '~')
@@ -938,12 +941,19 @@ def enter_regex
   ctr = 0
 end
 
+# page/scroll down.
+# TODO: 2019-03-18 - cursor needs to be updated
 def next_page
   $sta += $pagesize
+  $cursor += $pagesize
+  # FIXME this is sometimes correct, but in short  cases, cursor no longer refers
+  #  to a file. also after cycling, it no longer has a file.
 end
 
+# TODO: 2019-03-18 - cursor needs to be updated
 def prev_page
   $sta -= $pagesize
+  $cursor -= $pagesize
 end
 
 # print help on key-bindings
@@ -988,6 +998,8 @@ def print_help
     file.puts
     ary = []
     $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
+    # FIXME this works but not properly when long_listing is true.
+    # We should avoid using columnate as there are several file related things.
     ary = columnate ary, (ary.size/2)+1
     ary.each { |line| file.puts line }
   end
@@ -1013,6 +1025,19 @@ def page_with_tempfile
   rescue
     file.close
     file.unlink
+  end
+end
+
+def debug_vars
+  page_with_tempfile do |file|
+    file.puts 'DEBUG VARIABLES ARE:'
+    file.puts
+    file.puts "sta    #{$sta}"
+    file.puts "cursor #{$cursor}"
+    file.puts "stact  #{$stact}"
+    file.puts "viewport.size  #{$viewport.size}"
+    file.puts "view.size  #{$view.size}"
+    file.puts "file   #{current_file}"
   end
 end
 
@@ -1653,7 +1678,7 @@ def screen_settings
   $glines = `tput lines`.to_i
   $gcols = `tput cols`.to_i
   $grows = $glines - 3
-  $pagesize = 60
+  # $pagesize = 60
   # $gviscols = 3
   $pagesize = $grows * $gviscols
 end
@@ -2007,20 +2032,23 @@ end
 def pipe; end
 
 ## some cursor movement functions
-##
-#
+# TODO: 2019-03-18 - cursor should also be updated
+# sta is not updated when cursor > viewport.size and sta is still 0
 def cursor_scroll_dn
   moveto(pos + MSCROLL)
 end
 
+# TODO: 2019-03-18 - cursor should also be updated
 def cursor_scroll_up
   moveto(pos - MSCROLL)
 end
 
+# TODO: 2019-03-18 - cursor and sta should also be updated if page changes
 def cursor_dn
   moveto(pos + 1)
 end
 
+# TODO: 2019-03-18 - cursor and sta should also be updated if page changes
 def cursor_up
   moveto(pos - 1)
 end
@@ -2030,11 +2058,22 @@ def pos
 end
 
 # move cursor to given position/line
-def moveto(pos)
+# $sta should also move
+def moveto(position)
   orig = $cursor
-  $cursor = pos
+  $cursor = position
   $cursor = [$cursor, $view.size - 1].min
   $cursor = [$cursor, 0].max
+  # 2019-03-18 - adding sta
+  # $sta = position - only when page flips and file not visible
+  # FIXME not correct, it must stop at end or correctly cycle
+  # sta goes to 0 but cursor remains at 70
+  if $cursor - $sta > $viewport.size
+    $sta += $viewport.size
+  elsif $sta - $cursor > $viewport.size
+    $sta -= $pagesize
+  end
+
   star = [orig, $cursor].min
   fin = [orig, $cursor].max
   if $visual_mode
