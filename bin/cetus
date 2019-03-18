@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-18 14:02
+#  Last update: 2019-03-18 14:47
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -36,8 +36,6 @@ require 'fileutils'
 # 2019-02-20 - added so alt-screen is used
 system 'tput smcup'
 VERSION = '0.1.24.0'.freeze
-O_CONFIG = true
-# CONFIG_FILE = '~/.lyrainfo'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 $bindings = {}
@@ -281,7 +279,7 @@ $bookmarks = {}
 $mode = nil
 $glines = `tput lines`.to_i
 $gcols = `tput cols`.to_i
-$grows = $glines - 3
+$grows = $glines - 3  # can be a func
 $pagesize = 60
 $gviscols = 3
 $pagesize = $grows * $gviscols
@@ -950,7 +948,7 @@ end
 
 # print help on key-bindings
 # 2019-03-08 - write to temp file and user PAGER
-def print_help
+def old_print_help
   require 'tempfile'
   file = Tempfile.new('help')
   begin
@@ -974,7 +972,49 @@ def print_help
     file.close
     file.unlink
   end
-end #
+end
+
+def print_help
+  page_with_tempfile do |file|
+    file.puts '    HELP'
+
+    file.puts
+    file.puts 'To open a file or dir press 1-9 a-z A-Z (on left of file)'
+    file.puts 'Ctrl-s to select file under cursor'
+    file.puts 'Selection Mode: Each selection adds to selection list (toggles)'
+    file.puts '   Execute commands on selected files. e.g D C-x   '
+    file.puts '   Upon exiting mode, selection is cleared'
+    file.puts 'Use left and right arrows to move through directories'
+    file.puts
+    ary = []
+    $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
+    ary = columnate ary, (ary.size/2)+1
+    ary.each { |line| file.puts line }
+  end
+end
+
+def page_stat_for_file
+  stat = %x[ stat #{current_file} ]
+  return unless stat
+
+  page_with_tempfile do |file|
+    file.puts stat
+  end
+
+end
+
+def page_with_tempfile
+  require 'tempfile'
+  file = Tempfile.new('cetus')
+  begin
+    yield file
+    file.flush
+    system "$PAGER #{file.path}"
+  rescue
+    file.close
+    file.unlink
+  end
+end
 
 def view_bookmarks
   puts
@@ -1441,7 +1481,7 @@ def subcommand
     $writing = true if $modified
   elsif command == 'e'
     edit_current
-  elsif command == 'h' or command == 'help' or command = '?'
+  elsif command == 'h' or command == 'help' or command == '?'
     print_help
   elsif command == 'p'
     system 'echo $PWD | pbcopy'
@@ -1654,8 +1694,8 @@ end
 def file_actions(action = nil)
   # only add dtrx for gz
   h = { d: :delete, m: :move, r: :rename, v: ENV['EDITOR'] || :vim,
-        c: :copy, C: :chdir, W: :remspace, e: :execute,
-        l: :less, s: :most, f: :file, o: :open, x: :dtrx, z: :zip }
+        c: :copy, C: :chdir, W: :remspace, e: :execute, s: :page_stat_for_file,
+        l: :less, p: :most, f: :file, o: :open, x: :dtrx, z: :zip }
   # acttext = h[action.to_sym] || action
   acttext = action || ''
   file = nil
@@ -1822,6 +1862,10 @@ def file_actions(action = nil)
     refresh
   when :execute
     execute
+  when :page_stat_for_file
+    1
+    # already been executed by menu
+    # We could have just put 'stat' in the menu but that doesn't look so nice
   else
     return unless menu_text
 
@@ -2120,6 +2164,7 @@ def filetype(f)
   nil
 end
 
+# save offset in directory so we can revert to it when we return
 def save_dir_pos
   return if $sta == 0 && $cursor == 0
 
