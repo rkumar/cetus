@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-19 11:17
+#  Last update: 2019-03-20 00:37
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -35,7 +35,7 @@ require 'fileutils'
 
 # 2019-02-20 - added so alt-screen is used
 system 'tput smcup'
-VERSION = '0.1.24.0'.freeze
+VERSION = '0.1.25.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 $bindings = {}
@@ -330,6 +330,7 @@ $history = []
 ## sta is where view (viewport) begins, cursor is current row/file
 $sta = $cursor = 0
 $visual_mode = false
+$status_color = 4 # status line, can be 2 3 4 5 6
 # $help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Execute #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
 
 # Menubar on top of screen
@@ -349,7 +350,8 @@ def run
   fl = $files.size
 
   # selectedix = nil
-  $patt = ''
+  # $patt = ''
+  $patt = nil
   $sta = 0
   loop do
     # i = 0
@@ -358,7 +360,7 @@ def run
                 $files.grep(/#{$patt}/i)
               else
                 $files.grep(/#{$patt}/)
-                      end
+              end
             else
               $files
             end
@@ -395,13 +397,27 @@ def run
     buff.each { |line| print line, "\n" }
     print
 
-
     # prompt
     # print "#{$files.size}, #{view.size} sta=#{sta} (#{patt}): "
     v_mm = ''
     v_mm = "[#{$mode}] " if $mode
     $message = "No file highlighted (#{current_file})" unless $highlighted_a_column
-    print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
+    # 2019-03-19 - take cursor to last line
+    cf = current_file || "No matches, press ESC"
+    system "tput cup #{$glines} 0"
+    # system "tput cup #{$glines} #{$gcols - cfl - 10}"
+    print "\e[33;4%sm%*s" % [$status_color || '1', $gcols, " "]
+
+    # sometimes due to search, there is no file
+    if cf
+      cfl = cf.size
+      system "tput cup #{$glines} #{$gcols - cfl - 10}"
+      # print "#{REVERSE}#{cf}#{CLEAR}"
+      print "#{cf}"
+    end
+    # print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
+    # move to beginning of line, reset text mode after printing
+    print "\r#{v_mm}#{$patt}#{$message}\e[m"
     ch = get_char
     $highlighted_a_column = false
     # puts
@@ -415,6 +431,7 @@ def run
       ctr = 0
     elsif ch == 'BACKSPACE'
       $patt = $patt[0..-2] if $patt && !$patt.empty?
+      $message = $patt = nil if $patt == ''
       ctr = 0
     else
       # binding = $bindings[ch]
@@ -948,10 +965,10 @@ end
 
 ## take regex from user, to run on files on screen, user can filter file names
 def enter_regex
-  print 'Enter (regex) pattern: '
-  # $patt = gets().chomp
-  $patt = Readline.readline('>', true)
-  ctr = 0
+  # print 'Enter (regex) pattern: '
+  # move to beginning of line, and clear till EOL
+  print "\r\e[K"
+  $patt = Readline.readline('/', true)
 end
 
 # page/scroll down.
@@ -1011,6 +1028,8 @@ def print_help
     file.puts 'Use left and right arrows to move through directories'
     file.puts
     ary = []
+    # TODO: 2019-03-19 -  replace _ with space in value
+    # TODO: 2019-03-19 -  if : then show text after colon
     $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
     # FIXME this works but not properly when long_listing is true.
     # We should avoid using columnate as there are several file related things.
