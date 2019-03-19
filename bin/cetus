@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-19 00:27
+#  Last update: 2019-03-19 09:53
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -327,6 +327,7 @@ $default_sort_order = 'om'
 $sorto = $default_sort_order
 $viewctr = 0
 $history = []
+## sta is where view (viewport) begins, cursor is current row/file
 $sta = $cursor = 0
 $visual_mode = false
 # $help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Execute #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
@@ -347,11 +348,11 @@ def run
 
   fl = $files.size
 
-  selectedix = nil
+  # selectedix = nil
   $patt = ''
   $sta = 0
   loop do
-    i = 0
+    # i = 0
     $view = if $patt
               if $ignorecase
                 $files.grep(/#{$patt}/i)
@@ -365,6 +366,9 @@ def run
     $sta = 0 if $sta >= fl || $sta < 0
     # 2019-03-18 - added to ensure cursor not going OOB when next_page
     $cursor = 0 if $cursor >= fl || $cursor < 0
+    # $sta = $cursor if $sta > $cursor
+    $cursor = $sta if $sta > $cursor
+
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
     $title ||= Dir.pwd.sub(home, '~')
@@ -394,10 +398,12 @@ def run
 
     # prompt
     # print "#{$files.size}, #{view.size} sta=#{sta} (#{patt}): "
-    _mm = ''
-    _mm = "[#{$mode}] " if $mode
-    print "\r#{_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
+    v_mm = ''
+    v_mm = "[#{$mode}] " if $mode
+    $message = "No file highlighted (#{current_file})" unless $highlighted_a_column
+    print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
     ch = get_char
+    $highlighted_a_column = false
     # puts
     # break if ch == "q"
     # elsif  ch =~ /^[1-9a-zA-Z]$/
@@ -470,6 +476,9 @@ def columnate(ary, sz)
   buff = []
   return buff if ary.nil? || ary.empty?
 
+  # 2019-03-19 - just to make sure highlighted column is visible
+  $highlighted_a_column = false
+
   # determine width based on number of files to show
   # if less than sz then 1 col and full width
   #
@@ -515,6 +524,7 @@ def columnate(ary, sz)
         ## we do the coloring after trunc so ANSI escpe seq does not get get
         if ix + $sta == $cursor
           f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+          $highlighted_a_column = true
         elsif linecolor
           f = "#{linecolor}#{f}#{CLEAR}"
         end
@@ -526,6 +536,7 @@ def columnate(ary, sz)
         # f = "#{CURSOR_COLOR}#{f}#{CLEAR}" if ix + $sta == $cursor
         if ix + $sta == $cursor
           f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+          $highlighted_a_column = true
         else
           f = "#{linecolor}#{f}#{CLEAR}"  if linecolor
         end
@@ -946,6 +957,7 @@ end
 def next_page
   $sta += $pagesize
   $cursor += $pagesize
+  $sta = $cursor if $sta > $cursor
   # FIXME this is sometimes correct, but in short  cases, cursor no longer refers
   #  to a file. also after cycling, it no longer has a file.
 end
@@ -1036,7 +1048,8 @@ def debug_vars
     file.puts "cursor #{$cursor}"
     file.puts "stact  #{$stact}"
     file.puts "viewport.size  #{$viewport.size}"
-    file.puts "view.size  #{$view.size}"
+    file.puts "pagesize       #{$pagesize}"
+    file.puts "view.size      #{$view.size}"
     file.puts "file   #{current_file}"
   end
 end
@@ -2068,26 +2081,30 @@ def moveto(position)
   # $sta = position - only when page flips and file not visible
   # FIXME not correct, it must stop at end or correctly cycle
   # sta goes to 0 but cursor remains at 70
-  if $cursor - $sta > $viewport.size
-    $sta += $viewport.size
-  elsif $sta - $cursor > $viewport.size
+  # viewport.size may be wrong here, maybe should be pagesize only
+  if $cursor - $sta >= $pagesize
+    $sta += $pagesize
+  # elsif $sta - $cursor >= $viewport.size
+  end
+  if $sta > $cursor
     $sta -= $pagesize
+    # $sta = $cursor
   end
 
   star = [orig, $cursor].min
   fin = [orig, $cursor].max
-  if $visual_mode
-    # PWD has to be there in selction
-    if selected? current_file
-      # this depends on the direction
-      # $selected_files = $selected_files - $view[star..fin]
-      remove_from_selection $view[star..fin]
-      ## current row remains in selection always.
-      add_to_selection current_file
-    else
-      # $selected_files.concat $view[star..fin]
-      add_to_selection $view[star..fin]
-    end
+  return unless $visual_mode
+
+  # PWD has to be there in selction
+  if selected? current_file
+    # this depends on the direction
+    # $selected_files = $selected_files - $view[star..fin]
+    remove_from_selection $view[star..fin]
+    ## current row remains in selection always.
+    add_to_selection current_file
+  else
+    # $selected_files.concat $view[star..fin]
+    add_to_selection $view[star..fin]
   end
 end
 
