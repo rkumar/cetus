@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-20 00:37
+#  Last update: 2019-03-20 10:39
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -401,9 +401,10 @@ def run
     # print "#{$files.size}, #{view.size} sta=#{sta} (#{patt}): "
     v_mm = ''
     v_mm = "[#{$mode}] " if $mode
-    $message = "No file highlighted (#{current_file})" unless $highlighted_a_column
+    cf = current_file
+    $message = "No file highlighted (#{cf})" if cf and !$highlighted_a_column
+    $message = ' | No matches. Press ESCAPE' if $patt && !cf
     # 2019-03-19 - take cursor to last line
-    cf = current_file || "No matches, press ESC"
     system "tput cup #{$glines} 0"
     # system "tput cup #{$glines} #{$gcols - cfl - 10}"
     print "\e[33;4%sm%*s" % [$status_color || '1', $gcols, " "]
@@ -411,6 +412,7 @@ def run
     # sometimes due to search, there is no file
     if cf
       cfl = cf.size
+      # print right alighed
       system "tput cup #{$glines} #{$gcols - cfl - 10}"
       # print "#{REVERSE}#{cf}#{CLEAR}"
       print "#{cf}"
@@ -797,6 +799,7 @@ def change_dir(f, pos = nil)
     return
   end
   $visited_dirs.insert(0, Dir.pwd)
+  save_dir_pos # added 2019-03-20 - so we get to same file
   f = File.expand_path(f)
   Dir.chdir f
   $filterstr ||= 'M'
@@ -913,8 +916,18 @@ def command_mode
   $mode = 'COM'
 end
 
+# go to parent dir, and maintain cursor on the dir we came out of
 def goto_parent_dir
+  # 2019-03-20 - when changing to parent, we need to keep cursor on
+  #  parent dir, not first
+  curr = File.basename(Dir.pwd)
+
   change_dir '..'
+
+  # get index of child dir in this dir, and set cursor to it.
+  index = $files.index(curr + '/')
+  pause "WARNING: Could not find #{curr} in this directory." unless index
+  $cursor = index if index
 end
 
 def goto_home_dir
@@ -2243,11 +2256,13 @@ end
 
 # save offset in directory so we can revert to it when we return
 def save_dir_pos
-  return if $sta == 0 && $cursor == 0
+  # the next line meant that it would not save first directory.
+  # return if $sta == 0 && $cursor == 0
 
   $dir_position[Dir.pwd] = [$sta, $cursor]
 end
 
+# revert to the position we were at in this directory
 def revert_dir_pos
   $sta = 0
   $cursor = 0
