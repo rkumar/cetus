@@ -8,13 +8,58 @@ Tested with ruby 2.5
 Latest changes:
 2019-03-04 - q is quit key, not Q
            - show directories first, then files.
-           - trying not to pollute main screen with listings.
+           - trying not to pollute main screen/terminal with listings (i.e. use alt screen)
+           - C-s to select (toggle) current file
 
 2018-03-12 - now using LEFT and RIGHT arrow keys to go down into a directory, or up to higher directory.
 Also, pressing RIGHT ARROW on a file with open the file.
 Previously RIGHT and LEFT arrows would move to next or previous columns, i have put this on left and right square bracket.
 
 2018-03-13 - unable to push new gem 0.1.16 to rubygems.
+
+
+## Selecting a file
+
+There are two ways of selecting a file.
+
+1. Pressing C-s on a file.
+2. Use hotkey (on left of file) to select without having to navigate.
+
+While using C-s marks a file as selected, pressing the hotkey will either open
+the file using PAGER or EDITOR depending on current mode.
+
+## Multiple Selection of files
+
+1. Press C-s on multiple files.
+2. Press `@` to enter multiple select mode.
+Now press the hotkey (left of file) to select it.
+
+To execute an action on multiple (or single) files, you may press `C-x` and choose
+an action such as move or delete, etc.
+
+You may also select all files with the same extension as current file. Invoke the
+filter menu using Tilde-F. Now select `x` or `:extension`.
+
+`Tilde-y` is the selection menu. M-a is select all, M-A is unselect all.
+
+## Moving multiple files
+
+First select multiple files by the above means.
+
+Now there are two ways to move selected files to another directory.
+
+1. Press `C-x m` and type the name of the directory at the prompt.
+
+2. Navigate to the target directory, and then press `C-x m` and type "." at the prompt.
+
+## Copying files to another directory.
+
+Use the same procedure as for moving files but press `C-x c`
+
+1. Press `C-x c` and then type the name of the target directory at the prompt.
+
+2. Navigate to the target directory, and press `C-x c`, and type '.' at the prompt.
+
 
 fork of lyra with a different hotkey idea. Use this for quickly navigating your file system using hotkeys
 and bookmarks, and executing commands on single or multiple files easily.
@@ -48,7 +93,7 @@ The rest is similar to lyra. Some key points are highlighted here.
 
 * Single-quote and small letter jumps to the first file starting with given letter. e.g. `'s`
 
-* Space bar pages, also Alt n and p. Ctrl-d and Ctrl-b goes down 10 rows.
+* Space-bar pages, also Alt n and p. Ctrl-d and Ctrl-b goes down 10 rows.
 
 * Backtick is the main menu, which has options for sorting, filtering, seeing often used dirs and files, choosing from dirs in the `z` database, choosing used files from the `.viminfo` file, etc.
 
@@ -56,7 +101,7 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * Use Alt-d and Alt-f to see used directories and used files. Used directories are those dirs in which you have opened a file, not all dirs you've traversed. Certain directories are added to this list to make it more useful such as GEM_HOME, RUBYPATH, GEM_PATH, RUBYLIB, PYTHONPATH and PYTHONHOME.
 
-* By default selecting a file invokes $EDITOR, the default command can be changed from the menu.
+* By default selecting a file invokes $EDITOR, the default command can be changed from the menu. While on a file, pressing C-e opens in EDITOR, and C-p opens in PAGER.
 
 * Switch between editor mode and page mode. OFten you wish to quickly view files (maybe for deleting or moving). You don't want these files to get listed in .viminfo. Switching to pager mode, invokes your $MANPAGER on selected files which makes navigation faster. Set `most` to your MANPAGER.
 
@@ -66,7 +111,7 @@ Other than using bookmarks, you can jump quickly to other directories or open fi
 
 * Use slash "/" to run a regex on the dir listing.
 
-* Use question "?" view directory tree in order to jump down several levels at once
+* Use question "?" to view help (was directory tree earlier)
 
 * Use ESCAPE or C-c to clear any filter, regex, sort order, sub-listing etc
 
@@ -91,7 +136,7 @@ Thus, F2 gives only child dirs in current dir, F3 gives recursive directories an
 
 ## Requirements ##
 
-Requires ruby 1.9.3, and uses zsh for globbing.
+Requires ruby 1.9.3 or higher, and uses zsh for globbing.
 Uses $EDITOR and $MANPAGER or $PAGER.
 
 Optionally uses ack, locate, find for options with that name. You may replace ack with ag or other.
