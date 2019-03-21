@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-21 09:29
+#  Last update: 2019-03-21 10:38
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -1237,11 +1237,15 @@ def toggle_menu
   when :toggle_columns
     # FIXME: 2019-03-20 - if 3 then 1
     # adjust stact and sta, if moving from panned position
-    $gviscols = 3 if $gviscols == 1
+    if $gviscols == 1
+      $gviscols = 3
+    else
+      $gviscols = 1
+    end
     # $long_listing = false if $gviscols > 1
     x = $grows * $gviscols
     $pagesize = $pagesize == x ? $grows : x
-    pause "Visible columns now set to #{$gviscols}"
+    message "Visible columns now set to #{$gviscols}"
   when :toggle_pager_mode
     $editor_mode = !$editor_mode
     $default_command = if $editor_mode
@@ -1258,9 +1262,11 @@ def toggle_menu
   when :toggle_long_list
     $long_listing = !$long_listing
     if $long_listing
+      $saved_gviscols = $gviscols
       $gviscols = 1
       $pagesize = $grows
     else
+      $gviscols = $saved_gviscols || 3
       x = $grows * $gviscols
       $pagesize = $pagesize == x ? $grows : x
     end
@@ -1269,7 +1275,7 @@ def toggle_menu
       $sta = $stact
       $stact = 0 # in case user was panned 2019-03-20 -
     end
-    message "Long listing is #{$long_listing}"
+    message "Long listing is #{$long_listing}, vis cols is #{$gviscols}"
     refresh
   end
 end
@@ -2075,12 +2081,11 @@ end
 #
 def viminfo
   file = File.expand_path('~/.viminfo')
-  if File.exist? file
-    $title = 'Files from ~/.viminfo'
-    # $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- | sed "s#~#$HOME#g"`.split("\n")
-    $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- `.split("\n")
-    $files.select! { |x| x = File.expand_path(x); File.exist?(x) }
-  end
+  return unless File.exist? file
+  $title = 'Files from ~/.viminfo'
+  # $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- | sed "s#~#$HOME#g"`.split("\n")
+  $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- `.split("\n")
+  $files.select! { |x| x = File.expand_path(x); File.exist?(x) }
 end
 
 ##  takes directories from the z program, if you use autojump you can
@@ -2088,24 +2093,23 @@ end
 #
 def z_interface
   file = File.expand_path('~/.z')
-  if File.exist? file
-    $title = 'Directories from ~/.z'
-    $files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
-    home = ENV['HOME']
-    # shorten file names
-    $files.collect! do |f|
-      f.sub(/#{home}/, '~')
-    end
+  return unless File.exist? file
+  $title = 'Directories from ~/.z'
+  $files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
+  home = ENV['HOME']
+  # shorten file names
+  $files.collect! do |f|
+    f.sub(/#{home}/, '~')
   end
 end
 
 def vidir
-  system "vidir"
+  system 'vidir'
 end
 ## there is no one consisten way i am getting.
 #  i need to do a shell join if I am to pipe ffiles to say: xargs ls -t
 #  but if i want to pipe names to grep xxx then i need to join with newlines
-def pipe; end
+# def pipe; end
 
 ## some cursor movement functions
 # TODO: 2019-03-18 - cursor should also be updated
