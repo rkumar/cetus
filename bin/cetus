@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-21 10:38
+#  Last update: 2019-03-21 12:44
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -35,7 +35,7 @@ require 'fileutils'
 
 # 2019-02-20 - added so alt-screen is used
 system 'tput smcup'
-VERSION = '0.1.27.0'.freeze
+VERSION = '0.1.28.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 $bindings = {}
@@ -57,17 +57,17 @@ $bindings = {
   '!' => 'execute',
   ',' => 'goto_parent_dir',
   '~' => 'goto_home_dir',
-  '-' => 'goto_previous_dir', # 2019-03-07 - added. like 'cd ='
-  '+' => 'goto_dir',       # 2019-03-07 - TODO: change binding
+  '-' => 'goto_previous_dir',
+  '+' => 'goto_dir',          # 2019-03-07 - TODO: change binding
   '.' => 'pop_dir',
   ':' => 'subcommand',
   "'" => 'goto_bookmark',
   '/' => 'enter_regex',
   'M-p' => 'prev_page',
   'M-n' => 'next_page',
-  'SPACE' => 'next_page',
-  'M-f' => 'select_visited_files',
-  'M-d' => 'select_used_dirs',
+  'SPACE' => 'next_page:Page Down',
+  'M-f' => 'select_from_visited_files',
+  'M-d' => 'select_from_used_dirs',
   'M-b' => 'bookmark_menu',
   'M-m' => 'create_bookmark',
   'M-M' => 'view_bookmarks',
@@ -82,11 +82,11 @@ $bindings = {
   # "RIGHT"   => "column_next",
   'RIGHT' => 'select_current', # changed 2018-03-12 - for faster navigation
   'LEFT' => 'goto_parent_dir', # changed on 2018-03-12 - earlier column_next 1
-  ']' => 'column_next',
-  '[' => 'column_next 1',
+  ']' => 'column_next: goto next column',
+  '[' => 'column_next 1: goto previous column',
   'C-x' => 'file_actions',
-  'M--' => 'columns_incdec -1',
-  'M-+' => 'columns_incdec 1',
+  'M--' => 'columns_incdec -1: reduce column width',
+  'M-+' => 'columns_incdec 1: increase column width',
   'S' => 'command_file list y ls -lh',
   'L' => 'command_file Page n less',
   'C-d' => 'cursor_scroll_dn',
@@ -151,14 +151,6 @@ $kh[KEY_F10] = 'F10'
 # testing out shift+Function. these are the codes my kb generates
 $kh[KEY_S_F1] = 'S-F1'
 $kh['[1;2Q'] = 'S-F2'
-
-def old_clear_screen
-  system 'clear'
-  return
-  system('tput cup 0 0')
-  # system 'tput ed'
-  print "\e[J"
-end
 
 # copied from fff
 def clear_screen
@@ -449,8 +441,11 @@ def run
       $message = $patt = nil if $patt == ''
       ctr = 0
     else
-      # binding = $bindings[ch]
+      # fetch binding for key
       x = $bindings[ch]
+      # remove comment string so only binding is left
+      x, _ = x.split(':') if x
+      # split into binding and args
       x = x.split if x
       if x
         binding = x.shift
@@ -1020,34 +1015,6 @@ def prev_page
   $cursor -= $pagesize
 end
 
-# print help on key-bindings
-# 2019-03-08 - write to temp file and user PAGER
-def old_print_help
-  require 'tempfile'
-  file = Tempfile.new('help')
-  begin
-    file.puts '    HELP'
-
-    file.puts
-    file.puts 'To open a file or dir press 1-9 a-z A-Z (on left of file)'
-    file.puts 'Ctrl-s to select file under cursor'
-    file.puts 'Selection Mode: Each selection adds to selection list (toggles)'
-    file.puts '   Execute commands on selected files. e.g D C-x   '
-    file.puts '   Upon exiting mode, selection is cleared'
-    file.puts 'Use left and right arrows to move through directories'
-    file.puts
-    ary = []
-    $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
-    ary = columnate ary, (ary.size/2)+1
-    ary.each { |line| file.puts line }
-    file.flush
-    system "$PAGER #{file.path}"
-  rescue
-    file.close
-    file.unlink
-  end
-end
-
 def print_help
   page_with_tempfile do |file|
     file.puts '    HELP'
@@ -1061,9 +1028,12 @@ def print_help
     file.puts 'Use left and right arrows to move through directories'
     file.puts
     ary = []
-    # TODO: 2019-03-19 -  replace _ with space in value
-    # TODO: 2019-03-19 -  if : then show text after colon
-    $bindings.each_pair { |k, v| ary.push "#{k.ljust(7)}  =>  #{v}" }
+    # 2019-03-19 -  if : then show text after colon
+    $bindings.each_pair { |k, v|
+      vv = v.tr('_', ' ')
+      vv = vv.split(':')[1].strip if vv.include?(':')
+      ary.push "#{k.ljust(7)}  =>  #{vv}"
+    }
     # FIXME this works but not properly when long_listing is true.
     # We should avoid using columnate as there are several file related things.
     ary = columnate ary, (ary.size/2)+1
@@ -1131,8 +1101,8 @@ def main_menu
     :z => :z_interface,
     :d => :child_dirs,
     :r => :recent_files,
-    '1' => :select_visited_files,
-    '2' => :select_used_dirs,
+    '1' => :select_from_visited_files,
+    '2' => :select_from_used_dirs,
     :t => :dirtree,
     '4' => :tree,
     :s => :sort_menu,
@@ -1163,9 +1133,9 @@ end
 
 def bookmark_menu
   h = {
-    :v => :view_bookmarks,
-    :c => :create_bookmark,
-    :g => :goto_bookmark
+    v: :view_bookmarks,
+    c: :create_bookmark,
+    g: :goto_bookmark
   }
   menu 'Bookmark Menu', h
 end
@@ -1209,6 +1179,8 @@ def menu(title, h)
   ch = get_char
   binding = h[ch]
   binding ||= h[ch.to_sym]
+  # TODO: 2019-03-21 - menu's do not have comments, they are symbols
+  # binding, _ = binding.split(':')
   if binding
     send(binding) if respond_to?(binding, true)
   end
@@ -1428,19 +1400,20 @@ def filter_for_current_extension
   reduce extn
 end
 
-def select_used_dirs
+def select_from_used_dirs
   $title = 'Used Directories'
   home = File.expand_path '~'
   $files = $used_dirs.uniq.map { |path| path.sub("#{home}", '~') }
 end
 
-def select_visited_files
+def select_from_visited_files
   # not yet a unique list, needs to be unique and have latest pushed to top
   $title = 'Visited Files'
   home = File.expand_path '~'
   $files = $visited_files.uniq.map { |path| path.sub("#{home}", '~') }
 end
 
+# maybe unused ??? XXX
 def select_bookmarks
   $title = 'Bookmarks'
   $files = $bookmarks.values
