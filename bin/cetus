@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-21 12:44
+#  Last update: 2019-03-21 14:41
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -414,7 +414,8 @@ def run
     if cf
       cfl = cf.size
       # print right alighed
-      system "tput cup #{$glines} #{$gcols - cfl - 25}"
+      padding = $debug_flag ? 15 : 3
+      system "tput cup #{$glines} #{$gcols - cfl - padding}"
       # print "#{REVERSE}#{cf}#{CLEAR}"
       if $debug_flag
         print "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
@@ -1140,31 +1141,7 @@ def bookmark_menu
   menu 'Bookmark Menu', h
 end
 
-# trying out fzf instead
-# 2019-03-08 - 23:46
-# FIXME returns a String not symbol, so some callers can fail
-def fzfmenu(title, h)
-  return unless h
-
-  pbold title.to_s
-  values = h.values.join("\n")
-  binding = `echo "#{values}" | fzf --prompt="#{title.to_s} :"`
-  # h.each_pair { |k, v| puts " #{k}: #{v}" }
-  # ch = get_char
-  # binding = h[ch]
-  # binding ||= h[ch.to_sym]
-  # FIXME we have converted symbol to string
-  ch = nil
-  if binding
-    binding = binding.chomp
-    send(binding) if respond_to?(binding, true)
-    ch = h.key(binding)
-  end
-  [ch, binding]
-end
-
-# this style used hotkeys which I remember. But it can get long.
-#  and I have to fix a hotkey for each new entry
+# Create a menu using title, and hash of key and binding
 def menu(title, h)
   return unless h
 
@@ -1191,7 +1168,6 @@ def toggle_menu
   h = { :h => :toggle_hidden, :c => :toggle_case, :l => :toggle_long_list, '1' => :toggle_columns,
         :p => :toggle_pager_mode, :e => :toggle_enhanced_list }
   _, menu_text = menu 'Toggle Menu', h
-  # NOTE fzfmenu returns string not symbol
   return unless menu_text
 
   case menu_text
@@ -1254,11 +1230,11 @@ end
 
 def sort_menu
   lo = nil
-  h = { n: :newest, a: :accessed, o: :oldest,
-        l: :largest, s: :smallest, m: :name, r: :rname, d: :dirs, c: :clear }
+  h = { m: :modified, a: :accessed, M: :oldest,
+        l: :largest, s: :smallest, n: :name, r: :rev_name, d: :dirs, c: :clear }
   ch, menu_text = menu 'Sort Menu', h
   case menu_text
-  when :newest
+  when :modified
     lo = 'om'
   when :accessed
     lo = 'oa'
@@ -1270,7 +1246,7 @@ def sort_menu
     lo = 'oL'
   when :name
     lo = 'on'
-  when :rname
+  when :rev_name
     lo = 'On'
   when :dirs
     lo = '/'
