@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-21 14:41
+#  Last update: 2019-03-21 23:56
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -26,7 +26,6 @@ require 'io/wait'
 require 'shellwords'
 # https://docs.ruby-lang.org/en/2.6.0/FileUtils.html
 require 'fileutils'
-# -- requires 1.9.3 for io/wait
 
 ## INSTALLATION
 # copy into PATH
@@ -199,11 +198,14 @@ def setup_terminal
 end
 
 # wrap readline so C-c can be ignored, but blank is taken as default
-def readline
+def readline prompt='>'
+  print "\e[?25h"
   begin
-    target = Readline.readline('>', true)
+    target = Readline.readline(prompt, true)
   rescue Interrupt
     return nil
+  ensure
+    print "\e[?25l"
   end
   target
 end
@@ -288,7 +290,8 @@ $pager_command = {
   unknown: 'open'
 }
 $dir_position = {}
-## CONSTANTS
+
+## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
 CURMARK = '>'.freeze
 MSCROLL = 10
@@ -306,6 +309,8 @@ ON_BLUE    = "\e[44m".freeze
 REVERSE    = "\e[7m".freeze
 UNDERLINE    = "\e[4m".freeze
 CURSOR_COLOR = ON_BLUE
+## --------------------------------------------- ##
+
 $patt = nil
 $ignorecase = true
 $quitting = false
@@ -323,10 +328,9 @@ $history = []
 $sta = $cursor = 0
 $visual_mode = false
 $status_color = 4 # status line, can be 2 3 4 5 6
-# $help = "#{BOLD}1-9a-zA-Z#{BOLD_OFF} Select #{BOLD}/#{BOLD_OFF} Grep #{BOLD}'#{BOLD_OFF} First char  #{BOLD}M-n/p#{BOLD_OFF} Paging  #{BOLD}!#{BOLD_OFF} Execute #{BOLD}@#{BOLD_OFF} Selection Mode  #{BOLD}q#{BOLD_OFF} Quit"
 
 # Menubar on top of screen
-$help = "#{BOLD}?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}C-x#{BOLD_OFF} File Actions  #{BOLD}q#{BOLD_OFF} Quit "
+@help = "#{BOLD}?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}C-x#{BOLD_OFF} File Actions  #{BOLD}q#{BOLD_OFF} Quit "
 
 ## main loop which calls all other programs
 def run
@@ -341,10 +345,10 @@ def run
 
   fl = $files.size
 
-  # selectedix = nil
-  # $patt = ''
   $patt = nil
   $sta = 0
+
+  # forever loop that prints dir and takes a key
   loop do
     $view = if $patt
               if $ignorecase
@@ -366,6 +370,7 @@ def run
 
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
+
     # added 2019-03-20 - actually stact should be reduced not brought to zero
     # 2019-03-21 - NOTE this may be redundant since I set to zero in next_page
     #  due to various edge cases.
@@ -374,20 +379,18 @@ def run
       $stact -= $grows while $stact >= $viewport.size
       $stact += $grows if $stact < 0
     end
+
     $title ||= Dir.pwd.sub(home, '~')
     clear_screen
 
 
     # title
-    print "#{GREEN}#{$help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
+    print "#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
     t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
     t = t[t.size - $gcols..-1] if t.size >= $gcols
     print "#{BOLD}#{t}#{CLEAR}\n"
 
-
-    ## nilling the title means a superimposed one gets cleared.
-    # $title = nil
-    # split into 2 procedures so columnate can e clean and reused.
+    # add hint and format the line
     buff = _format $viewport
 
     # break into as many columns as required
@@ -399,25 +402,27 @@ def run
     print
 
     # prompt
-    # print "#{$files.size}, #{view.size} sta=#{sta} (#{patt}): "
-    v_mm = ''
-    v_mm = "[#{$mode}] " if $mode
+    v_mm = $mode ? "[#{$mode}] " : ''
     cf = current_file
     $message = "No file highlighted (#{cf})" if cf and !$highlighted_a_column
     $message = ' | No matches. Press ESCAPE' if $patt && !cf
     # 2019-03-19 - take cursor to last line
     system "tput cup #{$glines} 0"
-    # system "tput cup #{$glines} #{$gcols - cfl - 10}"
+
+    # print a colored line at bottom of screen
+    # \e[33;41m  - set color of status_line
+    # %*s        - set blank spaces for entire line
     print "\e[33;4%sm%*s" % [$status_color || '1', $gcols, " "]
 
+    # Print the filename at the right side of the status_line
     # sometimes due to search, there is no file
     if cf
       cfl = cf.size
-      # print right alighed
-      padding = $debug_flag ? 15 : 3
+      # print right aligned
+      padding = @debug_flag ? 15 : 3
       system "tput cup #{$glines} #{$gcols - cfl - padding}"
       # print "#{REVERSE}#{cf}#{CLEAR}"
-      if $debug_flag
+      if @debug_flag
         print "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
       else
         print "#{cf}"
@@ -626,7 +631,7 @@ def _format(ary)
         stat ||= File.stat(File.expand_path(f))
         f = format('%10s  %s  %s', readable_file_size(stat.size, 1),
                    date_format(stat.mtime), f)
-      rescue Exception => e
+      rescue StandardError => e
         f = format('%10s  %s  %s', '?', '??????????', f)
       end
     end
@@ -778,21 +783,19 @@ def run_command(f)
   print "Run a command on #{files}: "
   begin
     # Readline::HISTORY.push(*values)
-    command = Readline.readline('>', true)
+    command = readline
     # command = gets().chomp
     return if command.empty?
 
     print 'Second part of command: '
     # command2 = gets().chomp
-    command2 = Readline.readline('>', true)
+    command2 = readline
     puts "#{command} #{files} #{command2}"
     system "#{command} #{files} #{command2}"
-  rescue Exception => ex
+    setup_terminal
+  rescue StandardError => ex
     perror "Canceled command, (#{ex}) press a key"
     return
-  end
-  begin
-  rescue Exception => ex
   end
 
   refresh
@@ -872,15 +875,18 @@ end
 
 ## accept dir to goto and change to that ( can be a file too)
 def goto_dir
+  print "\e[?25h"
   print 'Enter path: '
   begin
     # path = gets.chomp
-    path = Readline.readline('>', true)
+    path = readline
     return if path == ''
     # rescue => ex
-  rescue Exception => ex
+  rescue StandardError => ex
     perror 'Cancelled cd, press a key'
     return
+  ensure
+    print "\e[?25l"
   end
   f = File.expand_path(path)
   unless File.directory? f
@@ -990,7 +996,7 @@ def enter_regex
   # print 'Enter (regex) pattern: '
   # move to beginning of line, and clear till EOL
   print "\r\e[K"
-  $patt = Readline.readline('/', true)
+  $patt = readline '/'
 end
 
 # page/scroll down.
@@ -1059,14 +1065,15 @@ def page_with_tempfile
     yield file
     file.flush
     system "$PAGER #{file.path}"
-  rescue
+    setup_terminal
+  rescue StandardError
     file.close
     file.unlink
   end
 end
 
 def debug_vars
-  $debug_flag = true
+  @debug_flag = true
   page_with_tempfile do |file|
     file.puts 'DEBUG VARIABLES ARE:'
     file.puts
@@ -1112,8 +1119,8 @@ def main_menu
     :b => :bookmark_menu,
     :y => :selection_menu,
     :B => :bindkey_ext_command,
-    :M => :newdir,
-    '%' => :newfile,
+    :M => :create_a_dir,
+    '%' => :create_a_file,
     'S' => :scripts,
     :x => :extras
   }
@@ -1506,9 +1513,9 @@ end
 def subcommand
   print 'Enter command: q x wq p w e r h '
   begin
-    command = Readline.readline('>', true)
+    command = readline
     return if command == ''
-  rescue Exception => ex
+  rescue StandardError => ex
     return
   end
   if command == 'q'
@@ -1684,6 +1691,7 @@ def command_file(prompt, *command)
     file = Shellwords.escape(file)
     pbold "#{command} #{file} (#{pauseyn})"
     system "#{command} #{file}"
+    setup_terminal
     pause if pauseyn == 'y'
     refresh
   else
@@ -1862,7 +1870,8 @@ def file_actions(action = nil)
   when :zip
     print 'Archive name: '
     # target = gets().chomp
-    target = Readline.readline('>', true)
+    target = readline
+    return unless target
     return if target == ''
 
     # don't want a blank space or something screwing up
@@ -1871,6 +1880,7 @@ def file_actions(action = nil)
         perror "Target (#{target}) exists"
       else
         system "tar zcvf #{target} #{files}"
+        setup_terminal
         refresh
       end
     end
@@ -1879,7 +1889,7 @@ def file_actions(action = nil)
     # 2019-03-07 NOTE works for single file FIXME
     # 2019-03-07 - TODO for n files replace pattern with string
     print "rename #{text} to : "
-    target = Readline.readline('>', true)
+    target = readline
     return if target == ''
 
     text = File.expand_path(text)
@@ -1892,6 +1902,7 @@ def file_actions(action = nil)
     end
   when :most, :less, :vim
     system "#{menu_text} #{files}"
+    setup_terminal
     # should we remove from selection ?
 
   when :remspace
@@ -1929,6 +1940,7 @@ def file_actions(action = nil)
     pause
     print
     system "#{menu_text} #{files}"
+    setup_terminal
     refresh
     pause
   end
@@ -1981,7 +1993,7 @@ end
 
 def ag
   print 'Enter a pattern to search (ag): '
-  pattern = Readline.readline('>', true)
+  pattern = readline
   return if pattern == ''
 
   $title = "Files found using 'ag' #{pattern}"
@@ -1997,7 +2009,7 @@ end
 
 def ffind
   print 'Enter a file name pattern to find: '
-  pattern = Readline.readline('>', true)
+  pattern = readline
   return if pattern == ''
 
   $title = "Files found using 'find' #{pattern}"
@@ -2011,7 +2023,7 @@ end
 
 def locate
   print 'Enter a file name pattern to locate: '
-  pattern = Readline.readline('>', true)
+  pattern = readline
   return if pattern == ''
 
   $title = "Files found using 'locate' #{pattern}"
@@ -2054,6 +2066,7 @@ end
 
 def vidir
   system 'vidir'
+  setup_terminal
 end
 ## there is no one consisten way i am getting.
 #  i need to do a shell join if I am to pipe ffiles to say: xargs ls -t
@@ -2257,10 +2270,10 @@ def revert_dir_pos
   end
 end
 
-def newdir
+def create_a_dir
   print
   print 'Enter directory name: '
-  str = Readline.readline('>', true)
+  str = readline
   return if str == ''
 
   if File.exist? str
@@ -2271,21 +2284,22 @@ def newdir
     FileUtils.mkdir str
     $used_dirs.insert(0, str) if File.exist?(str)
     refresh
-  rescue Exception => ex
+  rescue StandardError => ex
     perror "Error in newdir: #{ex}"
   end
 end
 
-def newfile
+def create_a_file
   print
   print 'Enter file name: '
-  str = Readline.readline('>', true)
+  str = readline
   return if str == ''
 
   # FIXME a file with space will not create single file
   # 2019-03-10 - maybe touch a file
 
   system %($EDITOR "#{str}")
+  setup_terminal
   $visited_files.insert(0, str) if File.exist?(str)
   refresh
 end
@@ -2303,9 +2317,11 @@ end
 
 # ------------------- scripts ------------------ #
 # prompt for scripts to execute, giving selected file names
+# NOTE: TODO 2019-03-21 - some scripts can output a filelist to display
 def scripts
   title = 'Select a script'
   script_path = '~/.config/cetus/scripts'
+  # TODO write selected files to a known file before calling
   binding = `find #{script_path} -type f | fzf --prompt="#{title.to_s} :"`
   return unless binding
 
@@ -2330,12 +2346,14 @@ def view_selected_files
     $selected_files.each { |row| file.puts row }
     file.flush
     system "$PAGER #{file.path}"
+    setup_terminal
   rescue
     file.close
     file.unlink
   end
 end
 # ------------- end of view_selected_files --------------------------------#
+
 ##
 # Editing of the User Dir List.
 # remove current entry from used dirs list, since we may not want some entries being there
@@ -2457,13 +2475,14 @@ def enhance_file_list
   end
 end
 
+# insert important files to end of $files
 def insert_into_list(_dir, file)
   # ix = $files.index(dir)
   # raise "something wrong can find #{dir}." unless ix
   # $files.insert ix, *file
   # 2013-03-19 - 19:42 adding at end to avoid confusion
   # $files.concat file
-  $files.push *file
+  $files.push(*file)
 end
 
 def get_important_files(dir)
@@ -2483,6 +2502,7 @@ def get_important_files(dir)
   list
 end
 
+# set message which will be displayed in status line
 def message mess
   $message = mess
 end
@@ -2492,6 +2512,8 @@ Signal.trap('EXIT') do
   # system 'tput rmcup'
   exit
 end
+
+setup_terminal
 run
 # 2019-02-20 - added so alt-screen is used
 system 'tput rmcup'
