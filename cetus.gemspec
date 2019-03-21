@@ -5,7 +5,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
 Gem::Specification.new do |spec|
   spec.name          = 'cetus'
-  spec.version       = '0.1.26'
+  spec.version       = '0.1.27'
   spec.authors       = ['Rahul Kumar']
   spec.email         = ['oneness.univ@gmail.com']
   spec.description   = %q{lightning fast file navigator}
