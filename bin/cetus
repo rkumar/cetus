@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-20 11:43
+#  Last update: 2019-03-21 09:29
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -35,7 +35,7 @@ require 'fileutils'
 
 # 2019-02-20 - added so alt-screen is used
 system 'tput smcup'
-VERSION = '0.1.26.0'.freeze
+VERSION = '0.1.27.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 $bindings = {}
@@ -284,7 +284,7 @@ $grows = $glines - 3  # can be a func
 # $pagesize = 60
 $gviscols = 3
 $pagesize = $grows * $gviscols # can be a func
-$stact = 0
+$stact = 0 # used when panning a folder to next column
 # $editor_mode = true
 $editor_mode = false # changed 2018-03-12 - so we start in pager mode
 $enhanced_mode = true
@@ -354,7 +354,6 @@ def run
   $patt = nil
   $sta = 0
   loop do
-    # i = 0
     $view = if $patt
               if $ignorecase
                 $files.grep(/#{$patt}/i)
@@ -368,11 +367,21 @@ def run
     $sta = 0 if $sta >= fl || $sta < 0
     # 2019-03-18 - added to ensure cursor not going OOB when next_page
     $cursor = 0 if $cursor >= fl || $cursor < 0
+    # NOTE if we make cursor zero, then it can be < sta so in the next line
+    #  it will be made equal to sta which we may not want
     # $sta = $cursor if $sta > $cursor
     $cursor = $sta if $sta > $cursor
 
     $viewport = $view[$sta, $pagesize]
     fin = $sta + $viewport.size
+    # added 2019-03-20 - actually stact should be reduced not brought to zero
+    # 2019-03-21 - NOTE this may be redundant since I set to zero in next_page
+    #  due to various edge cases.
+    # $stact = 0 if $stact >= $viewport.size
+    if $stact >= $viewport.size
+      $stact -= $grows while $stact >= $viewport.size
+      $stact += $grows if $stact < 0
+    end
     $title ||= Dir.pwd.sub(home, '~')
     clear_screen
 
@@ -413,15 +422,19 @@ def run
     if cf
       cfl = cf.size
       # print right alighed
-      system "tput cup #{$glines} #{$gcols - cfl - 10}"
+      system "tput cup #{$glines} #{$gcols - cfl - 25}"
       # print "#{REVERSE}#{cf}#{CLEAR}"
-      print "#{cf}"
+      if $debug_flag
+        print "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
+      else
+        print "#{cf}"
+      end
     end
     # print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
     # move to beginning of line, reset text mode after printing
     print "\r#{v_mm}#{$patt}#{$message}\e[m"
     ch = get_char
-    $highlighted_a_column = false
+    # $highlighted_a_column = false
     # puts
     # break if ch == "q"
     # elsif  ch =~ /^[1-9a-zA-Z]$/
@@ -985,16 +998,23 @@ def enter_regex
 end
 
 # page/scroll down.
-# TODO: 2019-03-18 - cursor needs to be updated
 def next_page
   $sta += $pagesize
   $cursor += $pagesize
   $sta = $cursor if $sta > $cursor
   # FIXME this is sometimes correct, but in short  cases, cursor no longer refers
   #  to a file. also after cycling, it no longer has a file.
+  #  FIXME: 2019-03-20 - if cursor is panned to 3rd column and then we page,
+  #   then after a while no hints show up since stact is high.
+  $stact = 0
+  # next just does not work on the last page when it should
+  #  perhaps viewport has not yet been adjusted, that's why
+  # $stact = 0 if $stact >= $viewport.size
+  # setting to zero is not the best solution since hints are reset but this is better
+  #  than trying to maintain the same stact since the columns reduce in the end.
+  #  I tried checking that stact < viewport.size but nothing happened
 end
 
-# TODO: 2019-03-18 - cursor needs to be updated
 def prev_page
   $sta -= $pagesize
   $cursor -= $pagesize
@@ -1075,6 +1095,7 @@ def page_with_tempfile
 end
 
 def debug_vars
+  $debug_flag = true
   page_with_tempfile do |file|
     file.puts 'DEBUG VARIABLES ARE:'
     file.puts
@@ -1084,6 +1105,7 @@ def debug_vars
     file.puts "viewport.size  #{$viewport.size}"
     file.puts "pagesize       #{$pagesize}"
     file.puts "view.size      #{$view.size}"
+    file.puts "grows          #{$grows}"
     file.puts "file   #{current_file}"
   end
 end
@@ -1213,6 +1235,8 @@ def toggle_menu
     message "Ignore Case is now #{$ignorecase}"
     refresh
   when :toggle_columns
+    # FIXME: 2019-03-20 - if 3 then 1
+    # adjust stact and sta, if moving from panned position
     $gviscols = 3 if $gviscols == 1
     # $long_listing = false if $gviscols > 1
     x = $grows * $gviscols
@@ -1239,6 +1263,11 @@ def toggle_menu
     else
       x = $grows * $gviscols
       $pagesize = $pagesize == x ? $grows : x
+    end
+    if $stact > 0
+      # FIXME what if we had paged down as well and sta was > 0
+      $sta = $stact
+      $stact = 0 # in case user was panned 2019-03-20 -
     end
     message "Long listing is #{$long_listing}"
     refresh
@@ -1743,11 +1772,11 @@ def column_next(direction = 0)
     $cursor += $grows
     # 2019-03-18 - zero loses offset. we need to maintain it
     # $cursor = 0 if $cursor >= $viewport.size
-    if $cursor >= $viewport.size
-      while $cursor > 0
-        $cursor -= $grows
-      end
-      $cursor += $grows if $cursor < 0
+    if $cursor - $sta >= $viewport.size
+      $cursor -= $grows while $cursor > $sta
+      $stact -= $grows while $stact > 0
+      $cursor += $grows if $cursor < $sta
+      $stact  += $grows if $stact < 0
     end
   else
     $stact -= $grows
