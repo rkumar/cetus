@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-22 00:12
+#  Last update: 2019-03-23 00:23
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -15,6 +15,7 @@
 # 2019-03-04 - changed quit to q (earlier Q)
 # 2019-03-04 - first dirs then files
 # 2019-03-10 - changing selected_files to have fullpath
+# 2019-03-22 - refactoring the code, esp run()
 #  == TODO
 #  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
@@ -32,8 +33,6 @@ require 'fileutils'
 # alias c=~/bin/cetus.rb
 # c
 
-# 2019-02-20 - added so alt-screen is used
-system 'tput smcup'
 VERSION = '0.1.28.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
@@ -175,7 +174,8 @@ def reset_terminal
   # '\e[2J':   Clear the terminal.
   # '\e[;r':   Set the scroll region to its default value.
   #            Also sets cursor to (0,0).
-  print "\e[?7h\e[?25h\e[2J\e[;r"
+  # '\e[?1049l: Restore main screen buffer.
+  print "\e[?7h\e[?25h\e[2J\e[;r\e[?1049l"
 
   # Show user input.
   system 'stty echo'
@@ -185,12 +185,13 @@ end
 # call AFTER shelling to most or vim
 def setup_terminal
   # Setup the terminal for the TUI.
+  # '\e[?1049h': Use alternative screen buffer. smcup
   # '\e[?7l':    Disable line wrapping.
   # '\e[?25l':   Hide the cursor.
   # '\e[2J':     Clear the screen.
   # '\e[1;Nr':   Limit scrolling to scrolling area.
   #              Also sets cursor to (0,0).
-  printf("\e[?7l\e[?25l\e[2J\e[1;%sr", $glines)
+  printf("\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr", $glines)
   # earlier glines was grows
 
   # Hide echoing of user input
@@ -331,85 +332,70 @@ $status_color = 4 # status line, can be 2 3 4 5 6
 # Menubar on top of screen
 @help = "#{BOLD}?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}C-x#{BOLD_OFF} File Actions  #{BOLD}q#{BOLD_OFF} Quit "
 
-## main loop which calls all other programs
-def run
-  home = ENV['HOME']
-  ctr = 0
-  config_read
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+# ------------------- read_directory ------------------ #
+def read_directory
+  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  $filterstr ||= 'M'
+  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   $files = sort_file_list $files
   enhance_file_list
   ## added by RK 2014-03-31 - 00:29 since too many duplicates
   $files = $files.uniq if $enhanced_mode
+end
+# ------------- end of read_directory --------------------------------#
 
-  fl = $files.size
-
-  $patt = nil
-  $sta = 0
-
-  # forever loop that prints dir and takes a key
-  loop do
-
-    # view consists of all files (filtered by pattern if necessary)
-    $view = if $patt
-              if $ignorecase
-                $files.grep(/#{$patt}/i)
-              else
-                $files.grep(/#{$patt}/)
-              end
+# ------------------- create_viewport ------------------ #
+def create_viewport
+  $view = if $patt
+            if $ignorecase
+              $files.grep(/#{$patt}/i)
             else
-              $files
+              $files.grep(/#{$patt}/)
             end
+          else
+            $files
+          end
 
-    fl = $view.size
-    $sta = 0 if $sta >= fl || $sta < 0
-    # 2019-03-18 - added to ensure cursor not going OOB when next_page
-    $cursor = 0 if $cursor >= fl || $cursor < 0
+  fl = $view.size
+  $sta = 0 if $sta >= fl || $sta < 0
+  $cursor = 0 if $cursor >= fl || $cursor < 0
 
-    # NOTE if we make cursor zero, then it can be < sta so in the next line
-    #  it will be made equal to sta which we may not want
-    # $sta = $cursor if $sta > $cursor
-    $cursor = $sta if $sta > $cursor
+  # NOTE if we make cursor zero, then it can be < sta so in the next line
+  #  it will be made equal to sta which we may not want
+  $cursor = $sta if $sta > $cursor
 
-    # viewport are the files that are visible, subset of view
-    $viewport = $view[$sta, $pagesize]
-    fin = $sta + $viewport.size
+  # viewport are the files that are visible, subset of view
+  $viewport = $view[$sta, $pagesize]
+end
+# ------------- end of create_viewport --------------------------------#
 
-    # added 2019-03-20 - actually stact should be reduced not brought to zero
-    # 2019-03-21 - NOTE this may be redundant since I set to zero in next_page
-    #  due to various edge cases.
-    # $stact = 0 if $stact >= $viewport.size
-    if $stact >= $viewport.size
-      $stact -= $grows while $stact >= $viewport.size
-      $stact += $grows if $stact < 0
-    end
+# ------------------- print_title ------------------ #
+def print_title
 
-    $title ||= Dir.pwd.sub(home, '~')
-    clear_screen
+  # print help line and version
+  print "#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
 
+  # print 1 of n files, sort order, filter etc details
+  $title ||= Dir.pwd.sub(ENV['HOME'], '~')
+  fin = $sta + $viewport.size
+  fl = $view.size
+  t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
 
-    # title
-    print "#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
-    t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
-    t = t[t.size - $gcols..-1] if t.size >= $gcols
-    print "#{BOLD}#{t}#{CLEAR}\n"
+  # don't exceed columns while printing
+  t = t[t.size - $gcols..-1] if t.size >= $gcols
 
-    # add hint and format the line
-    buff = _format $viewport
+  print "#{BOLD}#{t}#{CLEAR}\n"
+end
+# ------------- end of print_title --------------------------------#
 
-    # break into as many columns as required
-    buff = columnate buff, $grows
-
-    # needed the next line to see how much extra we were going in padding
-    # buff.each {|line| print "#{REVERSE}#{line}#{CLEAR}\n" }
-    buff.each { |line| print line, "\n" }
-    print
-
+# TODO clean this up and simplify it
+def status_line
     # prompt
     v_mm = $mode ? "[#{$mode}] " : ''
     cf = current_file
     $message = "No file highlighted (#{cf})" if cf and !$highlighted_a_column
     $message = ' | No matches. Press ESCAPE' if $patt && !cf
+
     # 2019-03-19 - take cursor to last line
     system "tput cup #{$glines} 0"
 
@@ -435,43 +421,72 @@ def run
     # print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
     # move to beginning of line, reset text mode after printing
     print "\r#{v_mm}#{$patt}#{$message}\e[m"
-    ch = get_char
-    # $highlighted_a_column = false
-    # puts
-    # break if ch == "q"
-    # elsif  ch =~ /^[1-9a-zA-Z]$/
-    # 2019-03-04 - ignore q since that is quit key now
-    # if  ch =~ /^[a-zZ]$/
-    if ch.match?(/^[a-pr-zZ]$/)
-      # hint mode
-      select_hint $viewport, ch
-      ctr = 0
-    elsif ch == 'BACKSPACE'
-      $patt = $patt[0..-2] if $patt && !$patt.empty?
-      $message = $patt = nil if $patt == ''
-      ctr = 0
-    else
-      # fetch binding for key
-      x = $bindings[ch]
-      # remove comment string so only binding is left
-      x, _ = x.split(':') if x
-      # split into binding and args
-      x = x.split if x
-      if x
-        binding = x.shift
-        args = x
-        send(binding, *args) if binding
-      else
-        perror "No binding for #{ch}"
-      end
-      # p ch
-    end
-    break if $quitting
-  end
-  write_curdir
-  puts 'bye'
-  config_write if $writing
+
 end
+
+def redraw with_read=false
+  read_directory if with_read
+
+  draw_directory
+end
+
+def draw_directory
+
+  # all this seems to be happening for each keystroke even if
+  # not really required. FIXME maybe reduce and call when required
+
+
+  # view consists of all files (filtered by pattern if necessary)
+  # viewport is only that subset of view that is displayed on screen
+  create_viewport
+  clear_screen
+  print_title
+
+  # add hint and format the line
+  buff = _format $viewport
+
+  # break into as many columns as required
+  # This is where directories get their blue color
+  buff = columnate buff, $grows
+
+  buff.each { |line| print line, "\n" }
+  print
+
+  status_line
+end
+
+def resolve_key key
+  if key.match?(/^[a-pr-zZ]$/)
+    # hint mode
+    select_hint $viewport, key
+  elsif key == 'BACKSPACE'
+    # do we really need this TODO
+    $patt = $patt[0..-2] if $patt && !$patt.empty?
+    $message = $patt = nil if $patt == ''
+  else
+    resolve_binding key
+  end
+end
+
+def resolve_binding key
+  # fetch binding for key
+  x = $bindings[key]
+
+  # remove comment string so only binding is left
+  x, _ = x.split(':') if x
+
+  # split into binding and args
+  x = x.split if x
+  if x
+    binding = x.shift
+    args = x
+    send(binding, *args) if binding
+  else
+    perror "No binding for #{key}"
+  end
+end
+
+
 
 ## write current dir to a file so we can ccd to it when exiting
 def write_curdir
@@ -659,11 +674,11 @@ def _format(ary)
 end
 
 ## select file based on key pressed
-def select_hint(view, ch)
+def select_hint view, key
   # a to y is direct
   # if x or z take a key IF there are those many
   #
-  ix = get_index(ch, view.size)
+  ix = get_index(key, view.size)
   return unless ix
 
   f = view[ix]
@@ -678,7 +693,6 @@ def select_hint(view, ch)
   else
     open_file f
   end
-  # selectedix=ix
 end
 
 ## toggle selection state of file
@@ -711,6 +725,7 @@ def open_file(f)
     save_dir_pos
     change_dir f, nextpos
   elsif File.readable? f
+    # TODO: looks complex pls simplify !! XXX
     $default_command ||= '$PAGER'
     if !$editor_mode
       ft = filetype f
@@ -736,6 +751,7 @@ def open_file(f)
     f = Dir.pwd + '/' + f if f[0] != '/'
     $visited_files.insert(0, f)
     push_used_dirs Dir.pwd
+    redraw
   else
     perror "open_file: (#{f}) not found"
     # could check home dir or CDPATH env variable DO
@@ -818,15 +834,12 @@ def change_dir(f, pos = nil)
   save_dir_pos # added 2019-03-20 - so we get to same file
   f = File.expand_path(f)
   Dir.chdir f
-  $filterstr ||= 'M'
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
-  $files = sort_file_list $files
-  post_cd
-  if pos
-    # convert curpos to sta also
-    # $cursor = pos.to_i
-    goto_line pos.to_i
-  end
+  # $filterstr ||= 'M'
+  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
+  # $files = sort_file_list $files
+  post_cd # 2019-03-23 - earlier drawing happened later, now before
+  goto_line pos.to_i if pos
+  redraw true
 end
 
 def goto_previous_dir
@@ -969,13 +982,13 @@ end
 
 # Goes to directory bookmarked with number or upper case char.
 # If lower case character given, then go to first file starting with char.
-def goto_bookmark(ch = nil)
-  unless ch
+def goto_bookmark(key = nil)
+  unless key
     print 'Enter bookmark char: '
-    ch = get_char
+    key = get_char
   end
-  if ch =~ /^[0-9A-Z]$/
-    d = $bookmarks[ch]
+  if key =~ /^[0-9A-Z]$/
+    d = $bookmarks[key]
     # this is if we use zfm's bookmarks which have a position
     # this way we leave the position as is, so it gets written back
     nextpos = nil
@@ -987,11 +1000,11 @@ def goto_bookmark(ch = nil)
       end
       change_dir d, nextpos
     else
-      perror "#{ch} not a bookmark"
+      perror "#{key} not a bookmark"
     end
   else
-    # goto_entry_starting_with ch
-    file_starting_with ch
+    # goto_entry_starting_with key
+    file_starting_with key
   end
 end
 
@@ -1098,8 +1111,8 @@ def view_bookmarks
   $bookmarks.each_pair { |k, v| puts "#{k.ljust(7)}  =>  #{v}" }
   puts
   print 'Enter bookmark to goto: '
-  ch = get_char
-  goto_bookmark(ch) if ch =~ /^[0-9A-Z]$/
+  key = get_char
+  goto_bookmark(key) if key =~ /^[0-9A-Z]$/
 end
 
 # MENU MAIN -- keep consistent with zfm
@@ -1164,15 +1177,15 @@ def menu(title, h)
   x = ary.join("\n")
   puts %x{echo "#{x}" | column}
 
-  ch = get_char
-  binding = h[ch]
-  binding ||= h[ch.to_sym]
+  key = get_char
+  binding = h[key]
+  binding ||= h[key.to_sym]
   # TODO: 2019-03-21 - menu's do not have comments, they are symbols
   # binding, _ = binding.split(':')
   if binding
     send(binding) if respond_to?(binding, true)
   end
-  [ch, binding]
+  [key, binding]
 end
 
 def toggle_menu
@@ -1243,7 +1256,7 @@ def sort_menu
   lo = nil
   h = { m: :modified, a: :accessed, M: :oldest,
         l: :largest, s: :smallest, n: :name, r: :rev_name, d: :dirs, c: :clear }
-  ch, menu_text = menu 'Sort Menu', h
+  _, menu_text = menu 'Sort Menu', h
   case menu_text
   when :modified
     lo = 'om'
@@ -1321,7 +1334,7 @@ end
 # This is quite badly placed and named. Maybe these should go elsewhere
 def extras
   h = { '1' => :one_column, '2' => :multi_column, :c => :columns, :r => :config_read, :w => :config_write }
-  ch, menu_text = menu 'Extras Menu', h
+  key, menu_text = menu 'Extras Menu', h
   case menu_text
   when :one_column
     $pagesize = $grows
@@ -1330,10 +1343,10 @@ def extras
     $pagesize = $grows * $gviscols
   when :columns
     print "How many columns to show: 1-6 [current #{$gviscols}]? "
-    ch = get_char
-    ch = ch.to_i
-    if ch > 0 && ch < 7
-      $gviscols = ch.to_i
+    key = get_char
+    key = key.to_i
+    if key > 0 && key < 7
+      $gviscols = key.to_i
       $pagesize = $grows * $gviscols
     end
   end
@@ -1342,7 +1355,7 @@ end
 def filter_menu
   h = { :d => :dirs, :f => :files, :e => :emptydirs, '0' => :emptyfiles,
   :r => :reduce_list, :x => :extension}
-  ch, menu_text = menu 'Filter Menu', h
+  _, menu_text = menu 'Filter Menu', h
   files = nil
   case menu_text
   when :dirs
@@ -1416,10 +1429,11 @@ def pop_dir
   ## XXX make sure the dir exists, cuold have been deleted. can be an error or crash otherwise
   $visited_dirs.push d
   Dir.chdir d
-  $filterstr ||= 'M'
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
-  $files = sort_file_list $files
+  # $filterstr ||= 'M'
+  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
+  # $files = sort_file_list $files
   post_cd
+  redraw true
 end
 
 # after changing directory
@@ -1500,12 +1514,12 @@ end
 ## accept a character to save this dir as a bookmark
 def create_bookmark
   print 'Enter A to Z or 0-9 to create a bookmark: '
-  ch = get_char
-  if ch =~ /^[0-9A-Z]$/
-    # $bookmarks[ch] = "#{Dir.pwd}:#{$cursor}"
-    $bookmarks[ch] = Dir.pwd
+  key = get_char
+  if key =~ /^[0-9A-Z]$/
+    # $bookmarks[key] = "#{Dir.pwd}:#{$cursor}"
+    $bookmarks[key] = Dir.pwd
     $modified = true
-    message "Created bookmark #{ch}"
+    message "Created bookmark #{key}"
   else
     perror 'Bookmark must be upper-case character or number.'
   end
@@ -1519,17 +1533,18 @@ def subcommand
   begin
     command = readline
     return if command == ''
-  rescue StandardError => ex
+  rescue StandardError
     return
   end
   if command == 'q'
+    # FIXME: 2019-03-22 - should this not call quit_command ?
     if $modified
       print 'Do you want to save bookmarks? (y/n): '
-      ch = get_char
-      if ch == 'y'
+      key = get_char
+      if key == 'y'
         $writing = true
         $quitting = true
-      elsif ch == 'n'
+      elsif key == 'n'
         $quitting = true
         print 'Quitting without saving bookmarks'
       else
@@ -1562,12 +1577,12 @@ def quit_command
   if $modified
     puts 'Press w to save bookmarks before quitting ' if $modified
     print 'Press another q to quit '
-    ch = get_char
+    key = get_char
   else
     $quitting = true
   end
-  $quitting = true if ch == 'q'
-  $quitting = $writing = true if ch == 'w'
+  $quitting = true if key == 'q'
+  $quitting = $writing = true if key == 'w'
 end
 
 def views
@@ -1707,10 +1722,10 @@ end
 #
 def ask_hint(deflt = nil)
   f = nil
-  ch = get_char
-  return deflt if ch == 'ENTER'
+  key = get_char
+  return deflt if key == 'ENTER'
 
-  ix = get_index(ch, $viewport.size)
+  ix = get_index(key, $viewport.size)
   f = $viewport[ix] if ix
   f
 end
@@ -1796,12 +1811,12 @@ def file_actions(action = nil)
     files = Shellwords.escape(file)
   end
 
-  ch = nil
+  key = nil
   if action
     menu_text = action
   else
-    ch, menu_text = menu "File Menu for #{text}", h
-    menu_text = :quit if ch == 'q'
+    key, menu_text = menu "File Menu for #{text}", h
+    menu_text = :quit if key == 'q'
   end
   return unless menu_text # pressed some wrong key
 
@@ -1812,9 +1827,9 @@ def file_actions(action = nil)
   when :delete
     delcommand = 'rmtrash'
     print "#{delcommand} #{text} ?[yn?]: "
-    ch = get_char
-    view_selected_files if ch == '?'
-    return if ch != 'y'
+    key = get_char
+    view_selected_files if key == '?'
+    return if key != 'y'
 
     system "#{delcommand} #{files}"
     refresh
@@ -1969,11 +1984,11 @@ def bindkey_ext_command
   print
   pbold 'Bind a capital letter to an external command'
   print 'Enter a capital letter to bind: '
-  ch = get_char
-  return if ch == 'Q'
+  key = get_char
+  return if key == 'Q'
 
-  if ch =~ /^[A-Z]$/
-    print "Enter an external command to bind to #{ch}: "
+  if key =~ /^[A-Z]$/
+    print "Enter an external command to bind to #{key}: "
     com = gets.chomp
     if com != ''
       print 'Enter prompt for command (blank if same as command): '
@@ -1982,7 +1997,7 @@ def bindkey_ext_command
     end
     print 'Pause after output [y/n]: '
     yn = get_char
-    $bindings[ch] = "command_file #{pro} #{yn} #{com}"
+    $bindings[key] = "command_file #{pro} #{yn} #{com}"
   end
 end
 
@@ -2139,6 +2154,8 @@ def moveto(position)
     # $selected_files.concat $view[star..fin]
     add_to_selection $view[star..fin]
   end
+ensure
+  redraw
 end
 
 # is given file in selected array
@@ -2366,8 +2383,8 @@ def remove_from_list
   unless $selected_files.empty?
     sz = $selected_files.size
     print "Remove #{sz} files from used list (y)?: "
-    ch = get_char
-    return if ch != 'y'
+    key = get_char
+    return if key != 'y'
 
     arr = $selected_files.map { |path| File.expand_path(path) }
 
@@ -2382,8 +2399,8 @@ def remove_from_list
   ## what if selected some rows
   file = $view[$cursor]
   print "Remove #{file} from used list (y)?: "
-  ch = get_char
-  return if ch != 'y'
+  key = get_char
+  return if key != 'y'
 
   file = File.expand_path(file)
   if File.directory? file
@@ -2511,13 +2528,37 @@ def message mess
   $message = mess
 end
 
-Signal.trap('EXIT') do
-  reset_terminal
-  # system 'tput rmcup'
-  exit
+# main loop which calls all other programs
+def run
+
+  Signal.trap('EXIT') do
+    reset_terminal
+    exit
+  end
+
+  setup_terminal
+  config_read
+
+  redraw true
+
+  # do we need this, have they changed after redraw
+  $patt = nil
+  $sta = 0
+
+  # forever loop that prints dir and takes a key
+  loop do
+
+    # moved the printing out of here
+    # TODO we need to call it from where required
+
+    key = get_char
+    resolve_key key
+
+    break if $quitting
+  end
+  write_curdir
+  puts 'bye'
+  config_write if $writing
 end
 
-setup_terminal
 run
-# 2019-02-20 - added so alt-screen is used
-system 'tput rmcup'
