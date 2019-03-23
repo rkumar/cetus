@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-23 00:23
+#  Last update: 2019-03-23 12:58
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -431,7 +431,6 @@ def redraw with_read=false
 end
 
 def draw_directory
-
   # all this seems to be happening for each keystroke even if
   # not really required. FIXME maybe reduce and call when required
 
@@ -626,15 +625,19 @@ def _format(ary)
   # determine width based on number of files to show
   # if less than sz then 1 col and full width
   #
-  # ix refers to the index in the complete file list, wherease we only show 60 at a time
+  # ix refers to the index in the complete file list, whereas we only
+  # show 60 at a time
   ix = 0
   ctr = 0
   ary.each do |f|
+    # raise "#{f} != #{ary[ix]}" if f != ary[ix]
     ## ctr refers to the index in the column
     ind = get_shortcut(ix)
     mark = SPACE
+    mark = '+' if visited? f
     cur = SPACE
     cur = CURMARK if ix + $sta == $cursor
+    # NOTE seems like f and ary[ix] are the same
     mark = GMARK if selected?(ary[ix])
 
     if $long_listing
@@ -704,6 +707,8 @@ def toggle_select(f=current_file)
   else
     add_to_selection f
   end
+  # XXX is it possible to just redraw this line
+  redraw
 end
 
 ## open file or directory
@@ -825,27 +830,41 @@ def run_command(f)
 end
 
 ## cd to a dir and go to position if specified
-def change_dir(f, pos = nil)
+# pos was being sent by bookmark, but we don't keep position in bookmark
+# so this is not useful. Since read is happening much later inside redraw,
+#  we cannot set the cursor to a file AFTER read.
+def change_dir f, position_cursor=false
   unless File.directory? f
-    perror "#{p} is not a directory, or does not exist."
+    perror "#{f} is not a directory, or does not exist."
     return
   end
-  $visited_dirs.insert(0, Dir.pwd)
+  dir_from = Dir.pwd
+  $visited_dirs.insert(0, dir_from)
   save_dir_pos # added 2019-03-20 - so we get to same file
   f = File.expand_path(f)
   Dir.chdir f
   # $filterstr ||= 'M'
   # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   # $files = sort_file_list $files
+  read_directory
+  # 2019-03-23 - XXX FIXME next may be redundant since directory has not changed
   post_cd # 2019-03-23 - earlier drawing happened later, now before
-  goto_line pos.to_i if pos
-  redraw true
+  if position_cursor
+    pos = index_of(File.basename(dir_from) + '/')
+    # goto_line pos.to_i if pos
+    $cursor = pos if pos
+  end
+  redraw
 end
 
 def goto_previous_dir
   prev_dir = $visited_dirs.first
   return unless prev_dir
   change_dir prev_dir
+end
+
+def index_of dir
+  $files.index(dir)
 end
 
 ## clear sort order and refresh listing, used typically if you are in some view
@@ -862,13 +881,11 @@ def escape
 end
 
 ## refresh listing after some change like option change, or toggle
+# NO LONGER NEEDED ??? TODO
 def refresh
-  $filterstr ||= 'M'
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
-  # first put dirs then files
-  $files = sort_file_list $files
   $patt = nil
   $title = nil
+  redraw true
 end
 
 # put directories first, then files
@@ -954,12 +971,14 @@ def goto_parent_dir
   #  parent dir, not first
   curr = File.basename(Dir.pwd)
 
-  change_dir '..'
+  change_dir '..', true
 
+  # FIXME 2019-03-23 - too late to change the cursor here since change_dir
+  #  now does a redraw !!! XXX
   # get index of child dir in this dir, and set cursor to it.
-  index = $files.index(curr + '/')
-  pause "WARNING: Could not find #{curr} in this directory." unless index
-  $cursor = index if index
+  # index = $files.index(curr + '/')
+  # pause "WARNING: Could not find #{curr} in this directory." unless index
+  # $cursor = index if index
 end
 
 def goto_home_dir
@@ -1026,6 +1045,7 @@ def next_page
   #  FIXME: 2019-03-20 - if cursor is panned to 3rd column and then we page,
   #   then after a while no hints show up since stact is high.
   $stact = 0
+  redraw
   # next just does not work on the last page when it should
   #  perhaps viewport has not yet been adjusted, that's why
   # $stact = 0 if $stact >= $viewport.size
@@ -1037,6 +1057,7 @@ end
 def prev_page
   $sta -= $pagesize
   $cursor -= $pagesize
+  redraw
 end
 
 def print_help
@@ -1197,15 +1218,15 @@ def toggle_menu
   case menu_text
   when :toggle_hidden
     $hidden = $hidden ? nil : 'D'
-    pause "Show hidden files is now #{!$hidden.nil?}"
+    pause "Show hidden files is now #{!$hidden.nil?}. Press a key."
     message "Show hidden is now #{!$hidden.nil?}"
-    refresh
+    redraw true
   when :toggle_case
     # $ignorecase = $ignorecase ? "" : "i"
     $ignorecase = !$ignorecase
-    pause "Ignore Case is now #{$ignorecase}"
+    pause "Ignore Case is now #{$ignorecase}. Press a key."
     message "Ignore Case is now #{$ignorecase}"
-    refresh
+    redraw true
   when :toggle_columns
     # FIXME: 2019-03-20 - if 3 then 1
     # adjust stact and sta, if moving from panned position
@@ -1218,6 +1239,7 @@ def toggle_menu
     x = $grows * $gviscols
     $pagesize = $pagesize == x ? $grows : x
     message "Visible columns now set to #{$gviscols}"
+    redraw true
   when :toggle_pager_mode
     $editor_mode = !$editor_mode
     $default_command = if $editor_mode
@@ -1230,6 +1252,7 @@ def toggle_menu
   when :toggle_enhanced_list
     $enhanced_mode = !$enhanced_mode
     message "Enhanced mode is #{$long_listing}"
+    redraw true
 
   when :toggle_long_list
     $long_listing = !$long_listing
@@ -1248,7 +1271,7 @@ def toggle_menu
       $stact = 0 # in case user was panned 2019-03-20 -
     end
     message "Long listing is #{$long_listing}, vis cols is #{$gviscols}"
-    refresh
+    redraw true
   end
 end
 
@@ -1279,8 +1302,10 @@ def sort_menu
   end
   ## This needs to persist and be a part of all listings, put in change_dir.
   $sorto = lo
-  $files = `zsh -c 'print -rl -- *(#{lo}#{$hidden}M)'`.split("\n") if lo
-  $title = nil
+  message "Sorted on #{menu_text}"
+  redraw true
+  # $files = `zsh -c 'print -rl -- *(#{lo}#{$hidden}M)'`.split("\n") if lo
+  # $title = nil
   # $files =$(eval "print -rl -- ${pattern}(${MFM_LISTORDER}$filterstr)")
 end
 
@@ -1313,6 +1338,7 @@ def command_menu
   when :locate
     locate
   when :today
+    # FIXME use filterstring
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
     $title = "Today's files"
   when :default_command
@@ -1329,6 +1355,7 @@ def command_menu
       $default_command = nil
     end
   end
+  redraw
 end
 
 # This is quite badly placed and named. Maybe these should go elsewhere
@@ -1382,6 +1409,8 @@ def filter_menu
   if files
     $files = files
     $stact = 0
+    $message = "Filtered on #{menu_text}"
+    redraw
   end
 end
 
@@ -1404,6 +1433,7 @@ def select_from_used_dirs
   $title = 'Used Directories'
   home = File.expand_path '~'
   $files = $used_dirs.uniq.map { |path| path.sub("#{home}", '~') }
+  redraw
 end
 
 def select_from_visited_files
@@ -1411,6 +1441,7 @@ def select_from_visited_files
   $title = 'Visited Files'
   home = File.expand_path '~'
   $files = $visited_files.uniq.map { |path| path.sub("#{home}", '~') }
+  redraw
 end
 
 # maybe unused ??? XXX
@@ -1447,9 +1478,11 @@ def post_cd
   $current_dir = Dir.pwd # 2019-03-10 - so i don't keep doing in functions
   screen_settings
   # i think this will screw with the dir_pos since it is not filename based.
-  enhance_file_list
+  # enhance_file_list
   ## added by RK 2014-03-31 - 00:29 since too many duplicates
-  $files = $files.uniq if $enhanced_mode
+  # $files = $files.uniq if $enhanced_mode
+  # 2019-03-23 - XXX FIXME next may be redundant since directory has not changed
+  # yet.
   revert_dir_pos
 end
 
@@ -1571,6 +1604,7 @@ def subcommand
   else
     perror "Don't know about command #{command}. Try :h or :help"
   end
+  redraw
 end
 
 def quit_command
@@ -1741,11 +1775,12 @@ def screen_settings
   $pagesize = $grows * $gviscols
 end
 
-## moves column offset so we can reach unindexed columns or entries
+## Tabs to next column in multi-column displays.
+#  Moves column offset so we can reach unindexed columns or entries,
+#  or those with double letters
 # 0 forward and any other back/prev
-# direction is 0 (forward) or 1 (backward)
-# TODO 2019-03-18 - $cursor should also move
-def column_next(direction = 0)
+# direction is 0 (forward) or '1' (backward)
+def column_next direction=0
   # right movement or panning cycles back to first column
   # leftward movement stops at first column.
   if direction == 0
@@ -1768,6 +1803,7 @@ def column_next(direction = 0)
     # We are trying to maintain offset
     $cursor += $grows if $cursor < 0
   end
+  redraw
 end
 
 # currently i am only passing the action in from the list there as a key
@@ -2165,6 +2201,13 @@ def selected?(file)
   return $selected_files.index file
 end
 
+# is given file in selected array
+def visited?(file)
+  $current_dir ||= Dir.pwd
+  file = File.join($current_dir, file)
+  return $visited_files.index file
+end
+
 # TODO: can be array
 def add_to_selection(file)
   ff = file
@@ -2395,6 +2438,8 @@ def remove_from_list
     refresh
     return
   end
+
+  # no file selected, use file under cursor
   print
   ## what if selected some rows
   file = $view[$cursor]
@@ -2506,20 +2551,26 @@ def insert_into_list(_dir, file)
   $files.push(*file)
 end
 
-def get_important_files(dir)
+# 2019-03-23 - not exactly clear what is happening XXX
+# this gets a directory (containing '/' at end)
+def get_important_files dir
   # checks various lists like visited_files and bookmarks
   # to see if files from this dir or below are in it.
   # More to be used in a dir with few files.
   list = []
   l = dir.size + 1
+  # 2019-03-23 - i think we are getting the basename of the file
+  #  if it is present in the given directory XXX
   $visited_files.each do |e|
     list << e[l..-1] if e.index(dir) == 0
   end
-  # bookmarks have : which needs to be removed
-  # list1 = $bookmarks.values.select do |e|
-  # e.index(dir) == 0
-  # end
-  # list.concat list1
+  # bookmarks if it starts with this directory then add it
+  # FIXME it puts same directory cetus into the list with full path
+  # We need to remove the base until this dir. get relative part
+  list1 = $bookmarks.values.select do |e|
+    e.index(dir) == 0 && e != dir
+  end
+  list.concat list1
   list
 end
 
