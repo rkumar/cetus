@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-23 12:58
+#  Last update: 2019-03-24 11:33
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -17,6 +17,8 @@
 # 2019-03-10 - changing selected_files to have fullpath
 # 2019-03-22 - refactoring the code, esp run()
 #  == TODO
+#  FIXME how to check that redraw not called twice depending on where
+#  a method is called from. a menu or direct from key. e.g help
 #  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
 #  fpath if existing
@@ -210,7 +212,7 @@ def readline prompt='>'
     # hide cursor
     print "\e[?25l"
   end
-  target
+  target.chomp
 end
 
 ## get a character from user and return as a string
@@ -334,6 +336,7 @@ $status_color = 4 # status line, can be 2 3 4 5 6
 
 # ------------------- read_directory ------------------ #
 def read_directory
+  rescan_required false
   # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
   $filterstr ||= 'M'
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
@@ -396,26 +399,20 @@ def status_line
     $message = "No file highlighted (#{cf})" if cf and !$highlighted_a_column
     $message = ' | No matches. Press ESCAPE' if $patt && !cf
 
-    # 2019-03-19 - take cursor to last line
-    system "tput cup #{$glines} 0"
-
-    # print a colored line at bottom of screen
-    # \e[33;41m  - set color of status_line
-    # %*s        - set blank spaces for entire line
-    print "\e[33;4%sm%*s" % [$status_color || '1', $gcols, " "]
+    clear_status_line
 
     # Print the filename at the right side of the status_line
     # sometimes due to search, there is no file
     if cf
-      cfl = cf.size
-      # print right aligned
-      padding = @debug_flag ? 15 : 3
-      system "tput cup #{$glines} #{$gcols - cfl - padding}"
+      # cfl = cf.size
+      # print right aligned TODO REFACTOR THIS
+      # padding = @debug_flag ? 15 : 3
+      # system "tput cup #{$glines} #{$gcols - cfl - padding}"
       # print "#{REVERSE}#{cf}#{CLEAR}"
       if @debug_flag
-        print "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
+        print_on_right "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
       else
-        print "#{cf}"
+        print_on_right "#{cf}"
       end
     end
     # print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
@@ -424,8 +421,18 @@ def status_line
 
 end
 
-def redraw with_read=false
-  read_directory if with_read
+# should we do a read of the dir
+def rescan?
+  $rescan_required
+end
+
+def rescan_required flag=true
+  $rescan_required = flag
+  redraw_required if flag
+end
+
+def redraw flag=false
+  read_directory if flag
 
   draw_directory
 end
@@ -453,6 +460,8 @@ def draw_directory
 
   status_line
 end
+
+def redraw_required(flag=true) $redraw_required = flag; end
 
 def resolve_key key
   if key.match?(/^[a-pr-zZ]$/)
@@ -617,6 +626,9 @@ end
 #  method and this overshadowed that method.
 #  NOTE: this does not do any coloring since the codes may get chopped by
 #   columnate method
+#   TODO 2019-03-23 - 23:30 we can do coloring here. columnate must check for color
+#   code at start of line, and check size accordingly. If it needs to truncate, then
+#   first take off the ANSI codes, truncate and put back.
 def _format(ary)
   # buff = Array.new
   buff = Array.new(ary.size)
@@ -708,7 +720,7 @@ def toggle_select(f=current_file)
     add_to_selection f
   end
   # XXX is it possible to just redraw this line
-  redraw
+  redraw_required
 end
 
 ## open file or directory
@@ -756,11 +768,11 @@ def open_file(f)
     f = Dir.pwd + '/' + f if f[0] != '/'
     $visited_files.insert(0, f)
     push_used_dirs Dir.pwd
-    redraw
   else
     perror "open_file: (#{f}) not found"
     # could check home dir or CDPATH env variable DO
   end
+  redraw_required
 end
 
 # regardless of mode, view the current file using pager
@@ -829,32 +841,35 @@ def run_command(f)
   get_char
 end
 
-## cd to a dir and go to position if specified
-# pos was being sent by bookmark, but we don't keep position in bookmark
-# so this is not useful. Since read is happening much later inside redraw,
-#  we cannot set the cursor to a file AFTER read.
+## cd to a dir.
+# Also, position cursor on child directory that we changed from if second param
+# is true.
 def change_dir f, position_cursor=false
   unless File.directory? f
     perror "#{f} is not a directory, or does not exist."
     return
   end
+
+  # before leaving a dir we save it in the list, as well as the cursor
+  # position, so we can restore that position when we return
   dir_from = Dir.pwd
   $visited_dirs.insert(0, dir_from)
-  save_dir_pos # added 2019-03-20 - so we get to same file
+  save_dir_pos
+
   f = File.expand_path(f)
   Dir.chdir f
-  # $filterstr ||= 'M'
-  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
-  # $files = sort_file_list $files
   read_directory
-  # 2019-03-23 - XXX FIXME next may be redundant since directory has not changed
-  post_cd # 2019-03-23 - earlier drawing happened later, now before
+  post_cd
+
+  # position the cursor on the previous directory
+  # This happens when we go to parent directory
   if position_cursor
+    # get the position of the previous directory
     pos = index_of(File.basename(dir_from) + '/')
-    # goto_line pos.to_i if pos
     $cursor = pos if pos
   end
-  redraw
+
+  redraw_required
 end
 
 def goto_previous_dir
@@ -881,11 +896,10 @@ def escape
 end
 
 ## refresh listing after some change like option change, or toggle
-# NO LONGER NEEDED ??? TODO
 def refresh
   $patt = nil
   $title = nil
-  redraw true
+  rescan_required
 end
 
 # put directories first, then files
@@ -909,18 +923,22 @@ end
 
 ## accept dir to goto and change to that ( can be a file too)
 def goto_dir
-  print "\e[?25h"
-  print 'Enter path: '
+  # print "\e[?25h"
+  print_last_line 'Enter path: '
   begin
     # path = gets.chomp
     path = readline
-    return if path == ''
+    if path.nil? || path == ''
+      clear_status_line
+      return
+    end
     # rescue => ex
   rescue StandardError => ex
+    # Nope, already caught interrupt and sent back nil
     perror 'Cancelled cd, press a key'
     return
   ensure
-    print "\e[?25l"
+    # print "\e[?25l"
   end
   f = File.expand_path(path)
   unless File.directory? f
@@ -969,10 +987,11 @@ end
 def goto_parent_dir
   # 2019-03-20 - when changing to parent, we need to keep cursor on
   #  parent dir, not first
-  curr = File.basename(Dir.pwd)
+  # curr = File.basename(Dir.pwd)
 
   change_dir '..', true
 
+  # TODO 2019-03-24 - we can revert to old thing and remove second arg from cd
   # FIXME 2019-03-23 - too late to change the cursor here since change_dir
   #  now does a redraw !!! XXX
   # get index of child dir in this dir, and set cursor to it.
@@ -1045,7 +1064,7 @@ def next_page
   #  FIXME: 2019-03-20 - if cursor is panned to 3rd column and then we page,
   #   then after a while no hints show up since stact is high.
   $stact = 0
-  redraw
+  redraw_required
   # next just does not work on the last page when it should
   #  perhaps viewport has not yet been adjusted, that's why
   # $stact = 0 if $stact >= $viewport.size
@@ -1057,7 +1076,7 @@ end
 def prev_page
   $sta -= $pagesize
   $cursor -= $pagesize
-  redraw
+  redraw_required
 end
 
 def print_help
@@ -1124,6 +1143,7 @@ def debug_vars
     file.puts "grows          #{$grows}"
     file.puts "file   #{current_file}"
   end
+  redraw_required
 end
 
 def view_bookmarks
@@ -1187,7 +1207,7 @@ def bookmark_menu
 end
 
 # Create a menu using title, and hash of key and binding
-def menu(title, h)
+def menu title, h
   return unless h
 
   pbold title.to_s
@@ -1206,6 +1226,7 @@ def menu(title, h)
   if binding
     send(binding) if respond_to?(binding, true)
   end
+  redraw_required
   [key, binding]
 end
 
@@ -1218,15 +1239,15 @@ def toggle_menu
   case menu_text
   when :toggle_hidden
     $hidden = $hidden ? nil : 'D'
-    pause "Show hidden files is now #{!$hidden.nil?}. Press a key."
+    # pause "Show hidden files is now #{!$hidden.nil?}. Press a key."
     message "Show hidden is now #{!$hidden.nil?}"
-    redraw true
+    rescan_required
   when :toggle_case
     # $ignorecase = $ignorecase ? "" : "i"
     $ignorecase = !$ignorecase
-    pause "Ignore Case is now #{$ignorecase}. Press a key."
+    # pause "Ignore Case is now #{$ignorecase}. Press a key."
     message "Ignore Case is now #{$ignorecase}"
-    redraw true
+    rescan_required
   when :toggle_columns
     # FIXME: 2019-03-20 - if 3 then 1
     # adjust stact and sta, if moving from panned position
@@ -1239,7 +1260,7 @@ def toggle_menu
     x = $grows * $gviscols
     $pagesize = $pagesize == x ? $grows : x
     message "Visible columns now set to #{$gviscols}"
-    redraw true
+    rescan_required
   when :toggle_pager_mode
     $editor_mode = !$editor_mode
     $default_command = if $editor_mode
@@ -1252,7 +1273,7 @@ def toggle_menu
   when :toggle_enhanced_list
     $enhanced_mode = !$enhanced_mode
     message "Enhanced mode is #{$long_listing}"
-    redraw true
+    rescan_required
 
   when :toggle_long_list
     $long_listing = !$long_listing
@@ -1271,7 +1292,7 @@ def toggle_menu
       $stact = 0 # in case user was panned 2019-03-20 -
     end
     message "Long listing is #{$long_listing}, vis cols is #{$gviscols}"
-    redraw true
+    rescan_required
   end
 end
 
@@ -1303,7 +1324,7 @@ def sort_menu
   ## This needs to persist and be a part of all listings, put in change_dir.
   $sorto = lo
   message "Sorted on #{menu_text}"
-  redraw true
+  rescan_required
   # $files = `zsh -c 'print -rl -- *(#{lo}#{$hidden}M)'`.split("\n") if lo
   # $title = nil
   # $files =$(eval "print -rl -- ${pattern}(${MFM_LISTORDER}$filterstr)")
@@ -1355,7 +1376,7 @@ def command_menu
       $default_command = nil
     end
   end
-  redraw
+  # redraw
 end
 
 # This is quite badly placed and named. Maybe these should go elsewhere
@@ -1410,7 +1431,7 @@ def filter_menu
     $files = files
     $stact = 0
     $message = "Filtered on #{menu_text}"
-    redraw
+    # redraw
   end
 end
 
@@ -1433,7 +1454,7 @@ def select_from_used_dirs
   $title = 'Used Directories'
   home = File.expand_path '~'
   $files = $used_dirs.uniq.map { |path| path.sub("#{home}", '~') }
-  redraw
+  # redraw
 end
 
 def select_from_visited_files
@@ -1441,7 +1462,7 @@ def select_from_visited_files
   $title = 'Visited Files'
   home = File.expand_path '~'
   $files = $visited_files.uniq.map { |path| path.sub("#{home}", '~') }
-  redraw
+  # redraw
 end
 
 # maybe unused ??? XXX
@@ -1464,31 +1485,24 @@ def pop_dir
   # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   # $files = sort_file_list $files
   post_cd
-  redraw true
+  rescan_required
 end
 
 # after changing directory
 def post_cd
-  $patt = nil
-  $sta = $cursor = 0
-  $title = nil
-  $message = nil
+  $title = $patt = $message = nil
+  $sta = $cursor = $stact = 0
   $visual_block_start = nil
-  $stact = 0
   $current_dir = Dir.pwd # 2019-03-10 - so i don't keep doing in functions
   screen_settings
-  # i think this will screw with the dir_pos since it is not filename based.
-  # enhance_file_list
-  ## added by RK 2014-03-31 - 00:29 since too many duplicates
-  # $files = $files.uniq if $enhanced_mode
-  # 2019-03-23 - XXX FIXME next may be redundant since directory has not changed
-  # yet.
+
+  # goto last position cursor was in this dir
+  # THis only makes sense if called after read_directory but before redraw
   revert_dir_pos
 end
 
 ## read dirs and files and bookmarks from file
 def config_read
-  # f =  File.expand_path("~/.zfminfo")
   f = File.expand_path(CONFIG_FILE)
   return unless File.readable? f
 
@@ -1546,8 +1560,11 @@ end
 
 ## accept a character to save this dir as a bookmark
 def create_bookmark
+
   print 'Enter A to Z or 0-9 to create a bookmark: '
+  print "\e[?25h" # unhide cursor
   key = get_char
+  print "\e[?25l" # hide cursor
   if key =~ /^[0-9A-Z]$/
     # $bookmarks[key] = "#{Dir.pwd}:#{$cursor}"
     $bookmarks[key] = Dir.pwd
@@ -1556,6 +1573,7 @@ def create_bookmark
   else
     perror 'Bookmark must be upper-case character or number.'
   end
+  # redraw
 end
 
 # allow user to exit using :q :wq :x
@@ -1604,7 +1622,7 @@ def subcommand
   else
     perror "Don't know about command #{command}. Try :h or :help"
   end
-  redraw
+  # redraw
 end
 
 def quit_command
@@ -1628,16 +1646,21 @@ def views
   $viewctr = 0 if $viewctr > views.size
 
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  # redraw
 end
 
 def child_dirs
-  $title = 'Child directories'
+  $title = 'Directories in current directory'
   $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
+  message "#{$files.size} files."
+  # redraw
 end
 
 def dirtree
-  $title = 'Child directories'
+  $title = 'Child directories with depth'
   $files = `zsh -c 'print -rl -- **/*(/#{$sorto}#{$hidden}M)'`.split("\n")
+  message "#{$files.size} files."
+  # redraw
 end
 
 #
@@ -1647,6 +1670,8 @@ def tree
   # Caution: use only for small projects, don't use in root.
   $title = 'Full Tree'
   $files = `zsh -c 'print -rl -- **/*(#{$sorto}#{$hidden}M)'`.split("\n")
+  message "#{$files.size} files."
+  # redraw
 end
 
 # lists recent files in current dir
@@ -1655,6 +1680,7 @@ def recent_files
   # print -rl -- **/*(Dom[1,10])
   $title = 'Recent files'
   $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n").reject {|f| f[0] == '.'}
+  # redraw
 end
 
 def select_current
@@ -1671,16 +1697,20 @@ def push_used_dirs(d = Dir.pwd)
   $used_dirs.insert(0, d)
 end
 
-def pbold(text)
+def pbold text
   puts "#{BOLD}#{text}#{BOLD_OFF}"
 end
 
-def perror(text)
-  puts "#{RED}#{text}#{CLEAR}"
+# This is supposed to print on the status line
+# but prints on next line.FIXME 2019-03-24 - 00:08
+def perror text
+  clear_status_line
+  last_line
+  print "#{RED}#{text}. Press a key.#{CLEAR}"
   get_char
 end
 
-def pause(text = ' Press a key ...')
+def pause text=' Press a key.'
   print text
   get_char
 end
@@ -1803,7 +1833,7 @@ def column_next direction=0
     # We are trying to maintain offset
     $cursor += $grows if $cursor < 0
   end
-  redraw
+  # redraw
 end
 
 # currently i am only passing the action in from the list there as a key
@@ -2060,6 +2090,7 @@ def ag
     return
   end
   $files = files
+  # redraw
 end
 
 def ffind
@@ -2074,6 +2105,7 @@ def ffind
   else
     $files = files
   end
+  # redraw
 end
 
 def locate
@@ -2089,6 +2121,7 @@ def locate
   else
     $files = files
   end
+  # redraw
 end
 
 ## Displays files from .viminfo file, if you use some other editor which
@@ -2102,6 +2135,7 @@ def viminfo
   # $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- | sed "s#~#$HOME#g"`.split("\n")
   $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- `.split("\n")
   $files.select! { |x| x = File.expand_path(x); File.exist?(x) }
+  # redraw
 end
 
 ##  takes directories from the z program, if you use autojump you can
@@ -2117,35 +2151,27 @@ def z_interface
   $files.collect! do |f|
     f.sub(/#{home}/, '~')
   end
+  # redraw
 end
 
 def vidir
   system 'vidir'
   setup_terminal
 end
-## there is no one consisten way i am getting.
-#  i need to do a shell join if I am to pipe ffiles to say: xargs ls -t
-#  but if i want to pipe names to grep xxx then i need to join with newlines
-# def pipe; end
 
 ## some cursor movement functions
-# TODO: 2019-03-18 - cursor should also be updated
-# sta is not updated when cursor > viewport.size and sta is still 0
 def cursor_scroll_dn
   moveto(pos + MSCROLL)
 end
 
-# TODO: 2019-03-18 - cursor should also be updated
 def cursor_scroll_up
   moveto(pos - MSCROLL)
 end
 
-# TODO: 2019-03-18 - cursor and sta should also be updated if page changes
 def cursor_dn
   moveto(pos + 1)
 end
 
-# TODO: 2019-03-18 - cursor and sta should also be updated if page changes
 def cursor_up
   moveto(pos - 1)
 end
@@ -2155,7 +2181,6 @@ def pos
 end
 
 # move cursor to given position/line
-# $sta should also move
 def moveto(position)
   orig = $cursor
   $cursor = position
@@ -2191,7 +2216,7 @@ def moveto(position)
     add_to_selection $view[star..fin]
   end
 ensure
-  redraw
+  # redraw
 end
 
 # is given file in selected array
@@ -2579,6 +2604,28 @@ def message mess
   $message = mess
 end
 
+def last_line
+  system "tput cup #{$glines} 0"
+end
+
+def clear_status_line
+  last_line
+  # print a colored line at bottom of screen
+  # \e[33;41m  - set color of status_line
+  # %*s        - set blank spaces for entire line
+  print "\e[33;4%sm%*s" % [$status_color || '1', $gcols, " "]
+end
+def print_on_right text
+  sz = text.size
+  system "tput cup #{$glines} #{$gcols - sz -1}"
+  print text
+end
+
+def print_last_line text
+  last_line
+  print text
+end
+
 # main loop which calls all other programs
 def run
 
@@ -2604,6 +2651,7 @@ def run
 
     key = get_char
     resolve_key key
+    redraw rescan?
 
     break if $quitting
   end
