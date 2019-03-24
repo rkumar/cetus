@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-24 11:58
+#  Last update: 2019-03-24 14:31
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -842,9 +842,7 @@ def run_command(f)
 end
 
 ## cd to a dir.
-# Also, position cursor on child directory that we changed from if second param
-# is true.
-def change_dir f, position_cursor=false
+def change_dir f
   unless File.directory? f
     perror "#{f} is not a directory, or does not exist."
     return
@@ -852,7 +850,6 @@ def change_dir f, position_cursor=false
 
   # before leaving a dir we save it in the list, as well as the cursor
   # position, so we can restore that position when we return
-  dir_from = Dir.pwd
   $visited_dirs.insert(0, dir_from)
   save_dir_pos
 
@@ -860,14 +857,6 @@ def change_dir f, position_cursor=false
   Dir.chdir f
   read_directory
   post_cd
-
-  # position the cursor on the previous directory
-  # This happens when we go to parent directory
-  if position_cursor
-    # get the position of the previous directory
-    pos = index_of(File.basename(dir_from) + '/')
-    $cursor = pos if pos
-  end
 
   redraw_required
 end
@@ -970,34 +959,18 @@ def selection_mode_toggle
   end
 end
 
-## toggle command mode
-# 2019-03-15 - TODO FIXME preferable when we go into command mode
-#  run a command on current or selected files. But then is it a mode, do we remain
-#  there, or come out immediately ?
-#  2019-03-17 - have removed this altogether. not required
-def command_mode
-  if $mode == 'COM'
-    $mode = nil
-    return
-  end
-  $mode = 'COM'
-end
-
 # go to parent dir, and maintain cursor on the dir we came out of
 def goto_parent_dir
-  # 2019-03-20 - when changing to parent, we need to keep cursor on
+  # When changing to parent, we need to keep cursor on
   #  parent dir, not first
-  # curr = File.basename(Dir.pwd)
+  curr = File.basename(Dir.pwd)
 
-  change_dir '..', true
+  change_dir '..'
 
-  # TODO 2019-03-24 - we can revert to old thing and remove second arg from cd
-  # FIXME 2019-03-23 - too late to change the cursor here since change_dir
-  #  now does a redraw !!! XXX
   # get index of child dir in this dir, and set cursor to it.
-  # index = $files.index(curr + '/')
-  # pause "WARNING: Could not find #{curr} in this directory." unless index
-  # $cursor = index if index
+  index = $files.index(curr + '/')
+  pause "WARNING: Could not find #{curr} in this directory." unless index
+  $cursor = index if index
 end
 
 def goto_home_dir
@@ -1059,18 +1032,8 @@ def next_page
   $sta += $pagesize
   $cursor += $pagesize
   $sta = $cursor if $sta > $cursor
-  # FIXME this is sometimes correct, but in short  cases, cursor no longer refers
-  #  to a file. also after cycling, it no longer has a file.
-  #  FIXME: 2019-03-20 - if cursor is panned to 3rd column and then we page,
-  #   then after a while no hints show up since stact is high.
   $stact = 0
   redraw_required
-  # next just does not work on the last page when it should
-  #  perhaps viewport has not yet been adjusted, that's why
-  # $stact = 0 if $stact >= $viewport.size
-  # setting to zero is not the best solution since hints are reset but this is better
-  #  than trying to maintain the same stact since the columns reduce in the end.
-  #  I tried checking that stact < viewport.size but nothing happened
 end
 
 def prev_page
@@ -1156,7 +1119,7 @@ def view_bookmarks
   goto_bookmark(key) if key =~ /^[0-9A-Z]$/
 end
 
-# MENU MAIN -- keep consistent with zfm
+# MENU MAIN
 def main_menu
   h = {
     :a => :ag,
@@ -1249,8 +1212,6 @@ def toggle_menu
     message "Ignore Case is now #{$ignorecase}"
     rescan_required
   when :toggle_columns
-    # FIXME: 2019-03-20 - if 3 then 1
-    # adjust stact and sta, if moving from panned position
     if $gviscols == 1
       $gviscols = 3
     else
@@ -1287,7 +1248,6 @@ def toggle_menu
       $pagesize = $pagesize == x ? $grows : x
     end
     if $stact > 0
-      # FIXME what if we had paged down as well and sta was > 0
       $sta = $stact
       $stact = 0 # in case user was panned 2019-03-20 -
     end
@@ -1359,11 +1319,11 @@ def command_menu
   when :locate
     locate
   when :today
-    # FIXME use filterstring
+    # FIXME: use filterstring
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
     $title = "Today's files"
   when :default_command
-    puts " THis no longer works"
+    puts ' This no longer works'
     puts 'Selecting a file usually invokes $EDITOR'
     puts 'What command do you want to use repeatedly on selected files: '
     $default_command = gets.chomp
@@ -1481,9 +1441,6 @@ def pop_dir
   ## XXX make sure the dir exists, cuold have been deleted. can be an error or crash otherwise
   $visited_dirs.push d
   Dir.chdir d
-  # $filterstr ||= 'M'
-  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
-  # $files = sort_file_list $files
   post_cd
   rescan_required
 end
@@ -1493,11 +1450,10 @@ def post_cd
   $title = $patt = $message = nil
   $sta = $cursor = $stact = 0
   $visual_block_start = nil
-  $current_dir = Dir.pwd # 2019-03-10 - so i don't keep doing in functions
+  $current_dir = Dir.pwd
   screen_settings
 
   # goto last position cursor was in this dir
-  # THis only makes sense if called after read_directory but before redraw
   revert_dir_pos
 end
 
@@ -2382,10 +2338,7 @@ def create_a_file
   print
   print 'Enter file name: '
   str = readline
-  return if str == ''
-
-  # FIXME a file with space will not create single file
-  # 2019-03-10 - maybe touch a file
+  return if str.nil? || str == ''
 
   system %($EDITOR "#{str}")
   setup_terminal
