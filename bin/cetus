@@ -6,10 +6,12 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-24 14:31
+#  Last update: 2019-03-25 10:30
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
+# 2019-03-24 - adding colors per line, but columnate will have to change
+#  since size calc will include color codes. Same for truncate
 # 2019-02-20 - added smcup and rmcup so alt-screen is used. works a bit
 # 2019-03-04 - change clear to go to 0,0 and clear down to reduce pollution
 # 2019-03-04 - changed quit to q (earlier Q)
@@ -306,11 +308,26 @@ ON_RED = "\e[41m".freeze
 GREEN      = "\e[32m".freeze
 YELLOW     = "\e[33m".freeze
 BLUE       = "\e[1;34m".freeze
+MAGENTA    = "\e[35m".freeze
+CYAN       = "\e[36m".freeze
 
 ON_BLUE    = "\e[44m".freeze
 REVERSE    = "\e[7m".freeze
 UNDERLINE    = "\e[4m".freeze
-CURSOR_COLOR = ON_BLUE
+CURSOR_COLOR = REVERSE
+
+# temporary till we read from LS_COLORS
+$color_for = {
+  '.rb' => RED,
+  '.txt' => GREEN,
+  '.tgz' => MAGENTA,
+  '.zip' => MAGENTA,
+  '.torrent' => GREEN,
+  '.srt' => GREEN,
+  '.html' => YELLOW,
+  # '' => "#{BOLD}#{YELLOW}",   # this hits directories too
+  '.sh' => CYAN
+}
 ## --------------------------------------------- ##
 
 $patt = nil
@@ -574,13 +591,18 @@ def columnate(ary, sz)
       linecolor = BLUE if f[-1] == '/'
 
       # check to see if we need to truncate
-      # TODO 2019-03-18 - truncate from middle of string.
-      fsz = f.size
-      if fsz > wid
-        fromstart = wid - 8
-        # f = f[0, wid - 2] + '$ '
-        # 2019-03-18 - trying to truncate from center
-        f = f[0, fromstart] + '$' + f[-6..-1] + ' '
+      # 2019-03-18 - truncate from middle of string.
+      # 2019-03-24 - truncate and size to take care of color codes
+      # fsz = f.size
+      unformatted_len, _ = filename_len(f)
+      if unformatted_len > wid
+        # take the excess out from the center on both sides
+        f = truncate_formatted_filename(f, unformatted_len, wid)
+        # next method will miss out the space added at end of filename
+        # z, z1 = filename_len(f)
+        # raise "truncated size f:#{z} != w:#{wid} (excess is #{excess})for #{f}" if z != wid
+
+        # be careful we don't truncate ANSI codes XXX TODO FIXME
         ## we do the coloring after trunc so ANSI escpe seq does not get get
         if ix + $sta == $cursor
           f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
@@ -597,11 +619,11 @@ def columnate(ary, sz)
         if ix + $sta == $cursor
           f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
           $highlighted_a_column = true
-        else
-          f = "#{linecolor}#{f}#{CLEAR}"  if linecolor
+        elsif linecolor
+          f = "#{linecolor}#{f}#{CLEAR}"
         end
         # f = f.ljust(wid)
-        f << ' ' * (wid - fsz)
+        f << ' ' * (wid - unformatted_len)
 
       end
 
@@ -619,6 +641,30 @@ def columnate(ary, sz)
     break if ix >= ary.size
   end
   buff
+end
+
+# shorten the filename to wid
+# unformatted_len is the length without ANSI formatting
+def truncate_formatted_filename f, unformatted_len, wid
+  excess = unformatted_len - wid
+  center = unformatted_len / 2
+  excess_half = excess / 2
+  point = center + excess_half
+  point1 = point - excess
+  # the space comes after the ANSI formatting
+  f = f[0..(point1 - 1)] + '$' + f[point + 2 .. -1] + ' '
+  f
+end
+
+def filename_len name
+  l = name.length
+  return l if name[0] != "\e"
+
+  # we have an escape code at the start of the name (and end, too)
+  index = name.index("m")
+  eindex = name.rindex("\e")
+  reall = eindex - index - 1
+  return reall, l
 end
 
 ## formats the data with number, mark and details
@@ -669,8 +715,13 @@ def _format(ary)
         f = format('%10s  %s  %s', '?', '??????????', f)
       end
     end
+    extension = File.extname(f)
+    color = $color_for[extension]
 
     s = "#{ind}#{mark}#{cur}#{f}"
+    if color
+      s = "#{color}#{s}#{CLEAR}"
+    end
 
     # NOTE: I cannot color the current line since _format does the chopping
     # so not only does the next lines alignment get skewed,
@@ -740,7 +791,7 @@ def open_file(f)
   f, nextpos = f.split(':') if f.index(':')
   if File.directory? f
     save_dir_pos
-    change_dir f, nextpos
+    change_dir f #, nextpos
   elsif File.readable? f
     # TODO: looks complex pls simplify !! XXX
     $default_command ||= '$PAGER'
@@ -850,7 +901,7 @@ def change_dir f
 
   # before leaving a dir we save it in the list, as well as the cursor
   # position, so we can restore that position when we return
-  $visited_dirs.insert(0, dir_from)
+  $visited_dirs.insert(0, Dir.pwd)
   save_dir_pos
 
   f = File.expand_path(f)
@@ -1009,7 +1060,7 @@ def goto_bookmark(key = nil)
         nextpos = d[ix + 1..-1]
         d = d[0, ix]
       end
-      change_dir d, nextpos
+      change_dir d #, nextpos
     else
       perror "#{key} not a bookmark"
     end
