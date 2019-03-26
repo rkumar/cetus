@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-25 10:30
+#  Last update: 2019-03-26 14:47
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -31,6 +31,8 @@ require 'io/wait'
 require 'shellwords'
 # https://docs.ruby-lang.org/en/2.6.0/FileUtils.html
 require 'fileutils'
+require 'logger'
+@log = Logger.new('log.txt')
 
 ## INSTALLATION
 # copy into PATH
@@ -40,7 +42,7 @@ require 'fileutils'
 VERSION = '0.1.29.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
-$bindings = {}
+# $bindings = {}
 $bindings = {
   '`' => 'main_menu',
   '=' => 'toggle_menu',
@@ -317,6 +319,13 @@ UNDERLINE    = "\e[4m".freeze
 CURSOR_COLOR = REVERSE
 
 # temporary till we read from LS_COLORS
+# NOTE: that osx uses LSCOLORS which only has colors for filetypes not
+#  extensions and patterns which LS_COLORS has.
+# LS_COLORS contains 2 character filetype colors. ex executable mi broken link
+#   extension based colros starting with '*.'
+#   file pattern starting with '*' and a character that is not .
+#   File.ftype(path) returns
+#   file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
 $color_for = {
   '.rb' => RED,
   '.txt' => GREEN,
@@ -328,6 +337,8 @@ $color_for = {
   # '' => "#{BOLD}#{YELLOW}",   # this hits directories too
   '.sh' => CYAN
 }
+$ls_pattern = {}
+$ls_ftype = {}
 ## --------------------------------------------- ##
 
 $patt = nil
@@ -715,8 +726,7 @@ def _format(ary)
         f = format('%10s  %s  %s', '?', '??????????', f)
       end
     end
-    extension = File.extname(f)
-    color = $color_for[extension]
+    color = color_for f
 
     s = "#{ind}#{mark}#{cur}#{f}"
     if color
@@ -737,6 +747,78 @@ def _format(ary)
     ix += 1
   end
   buff
+end
+
+def color_for fname
+  extension = File.extname(fname)
+  color = $color_for[extension]
+  return color if color
+
+  # check file against patterns
+  # NOTE: this could be slow
+  if File.file?(fname)
+    $ls_pattern.each_pair do |k, v|
+      # if fname.match?(/k/)
+      if fname =~ /#{k}/
+        @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
+        return v
+      else
+        # @log.debug "#{fname} di not match #{k}. color is #{v[1..-2]}"
+      end
+    end
+  end
+  # check filetypes
+  return $ls_ftype[File.ftype(fname)]
+end
+
+def parse_ls_colors
+
+  colorvar = ENV['LS_COLORS']
+  if colorvar.nil?
+    $ls_colors_found = nil
+    return
+  end
+  $ls_colors_found = true
+  ls = colorvar.split(':')
+  ls.each do |e|
+    patt, colr = e.split '='
+    colr = "\e[" + colr + 'm'
+    if e.start_with? '*.'
+      # extension, avoid '*' and use the rest as key
+      $color_for[patt[1..-1]] = colr
+    elsif e[0] == '*'
+      # file pattern, this would be a glob pattern not regex
+      # only for files not directories
+      patt = patt.gsub('.', '\.')
+      patt = patt.sub('+', '\\\+') # if i put a plus it does not go at all
+      patt = patt.gsub('-', '\-')
+      patt = patt.gsub('?', '.')
+      patt = patt.gsub('*', '.*')
+      patt = "^#{patt}" if patt[0] != '.'
+      patt = "#{patt}$" if patt[-1] != '*'
+      $ls_pattern[patt] = colr
+      @log.debug "Writing pattern (#{patt})."
+    elsif patt.length == 2
+      # file type, needs to be mapped to what ruby will return
+#   file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
+      case patt
+      when 'di'
+        $ls_ftype['directory'] = colr
+      when 'cd'
+        $ls_ftype['characterSpecial'] = colr
+      when 'bd'
+        $ls_ftype['blockSpecial'] = colr
+      when 'pi'
+        $ls_ftype['fifo'] = colr
+      when 'ln'
+        $ls_ftype['link'] = colr
+      when 'so'
+        $ls_ftype['socket'] = colr
+      else
+        $ls_ftype[patt] = colr
+      end
+    end
+  end
 end
 
 ## select file based on key pressed
@@ -2640,6 +2722,7 @@ def run
 
   setup_terminal
   config_read
+  parse_ls_colors
 
   redraw true
 
@@ -2662,6 +2745,7 @@ def run
   write_curdir
   puts 'bye'
   config_write if $writing
+  @log.close if @log
 end
 
 run
