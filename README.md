@@ -6,6 +6,7 @@ lightning-fast file navigator
 Tested with ruby 2.5
 
 Latest changes:
+2019-03-26 - Reading up 'LS_COLORS' and coloring filenames. v0.1.30
 2019-03-24 - Major refactoring and cleanup. v 0.1.29
 2019-03-04 - q is quit key, not Q
            - show directories first, then files.
