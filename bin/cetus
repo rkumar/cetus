@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-26 14:47
+#  Last update: 2019-03-29 08:48
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -19,7 +19,6 @@
 # 2019-03-10 - changing selected_files to have fullpath
 # 2019-03-22 - refactoring the code, esp run()
 #  == TODO
-#  FIXME how to check that redraw not called twice depending on where
 #  a method is called from. a menu or direct from key. e.g help
 #  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
 #  Make rubygem aware : gemspec or Gemfile the expand lib and bin
@@ -39,15 +38,15 @@ require 'logger'
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.29.0'.freeze
+VERSION = '0.1.30.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 # $bindings = {}
 $bindings = {
   '`' => 'main_menu',
   '=' => 'toggle_menu',
-  'M-y' => 'selection_menu',
-  'M-s' => 'sort_menu',
+  'M-s' => 'selection_menu',
+  'M-o' => 'sort_menu',
   'ENTER' => 'select_current',
   'C-p' => 'page_current',
   'C-e' => 'edit_current',
@@ -318,7 +317,6 @@ REVERSE    = "\e[7m".freeze
 UNDERLINE    = "\e[4m".freeze
 CURSOR_COLOR = REVERSE
 
-# temporary till we read from LS_COLORS
 # NOTE: that osx uses LSCOLORS which only has colors for filetypes not
 #  extensions and patterns which LS_COLORS has.
 # LS_COLORS contains 2 character filetype colors. ex executable mi broken link
@@ -326,18 +324,19 @@ CURSOR_COLOR = REVERSE
 #   file pattern starting with '*' and a character that is not .
 #   File.ftype(path) returns
 #   file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
-$color_for = {
+# This hash contains color codes for extensions. It is updated from
+# LS_COLORS.
+$ls_color = {
   '.rb' => RED,
-  '.txt' => GREEN,
   '.tgz' => MAGENTA,
   '.zip' => MAGENTA,
   '.torrent' => GREEN,
   '.srt' => GREEN,
-  '.html' => YELLOW,
-  # '' => "#{BOLD}#{YELLOW}",   # this hits directories too
   '.sh' => CYAN
 }
+# This hash contains colors for file patterns, updated from LS_COLORS
 $ls_pattern = {}
+# This hash contains colors for file types, updated from LS_COLORS
 $ls_ftype = {}
 ## --------------------------------------------- ##
 
@@ -350,6 +349,7 @@ $visited_files = []
 $visited_dirs = []
 ## dirs where some work has been done, for saving and restoring
 $used_dirs = []
+# zsh o = order m = modified time
 $default_sort_order = 'om'
 $sorto = $default_sort_order
 $viewctr = 0
@@ -365,7 +365,13 @@ $status_color = 4 # status line, can be 2 3 4 5 6
 # ------------------- read_directory ------------------ #
 def read_directory
   rescan_required false
-  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+
+  # http://zsh.sourceforge.net/Doc/Release/Shell-Builtin-Commands.html
+  # zsh print -rl
+  # -l Print the arguments separated by newlines instead of spaces.
+  # -r Ignore the escape conventions of echo.
+  # zshglob M = MARK_DIRS
+
   $filterstr ||= 'M'
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   $files = sort_file_list $files
@@ -419,7 +425,7 @@ def print_title
 end
 # ------------- end of print_title --------------------------------#
 
-# TODO clean this up and simplify it
+# TODO: clean this up and simplify it
 def status_line
     # prompt
     v_mm = $mode ? "[#{$mode}] " : ''
@@ -432,18 +438,12 @@ def status_line
     # Print the filename at the right side of the status_line
     # sometimes due to search, there is no file
     if cf
-      # cfl = cf.size
-      # print right aligned TODO REFACTOR THIS
-      # padding = @debug_flag ? 15 : 3
-      # system "tput cup #{$glines} #{$gcols - cfl - padding}"
-      # print "#{REVERSE}#{cf}#{CLEAR}"
       if @debug_flag
         print_on_right "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
       else
         print_on_right "#{cf}"
       end
     end
-    # print "\r#{v_mm}#{$patt} #{GREEN}#{$message}#{CLEAR} >"
     # move to beginning of line, reset text mode after printing
     print "\r#{v_mm}#{$patt}#{$message}\e[m"
 
@@ -609,12 +609,7 @@ def columnate(ary, sz)
       if unformatted_len > wid
         # take the excess out from the center on both sides
         f = truncate_formatted_filename(f, unformatted_len, wid)
-        # next method will miss out the space added at end of filename
-        # z, z1 = filename_len(f)
-        # raise "truncated size f:#{z} != w:#{wid} (excess is #{excess})for #{f}" if z != wid
 
-        # be careful we don't truncate ANSI codes XXX TODO FIXME
-        ## we do the coloring after trunc so ANSI escpe seq does not get get
         if ix + $sta == $cursor
           f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
           $highlighted_a_column = true
@@ -626,7 +621,6 @@ def columnate(ary, sz)
 
         ## we do the coloring before padding so the entire line does not get
         # padded, only file name
-        # f = "#{CURSOR_COLOR}#{f}#{CLEAR}" if ix + $sta == $cursor
         if ix + $sta == $cursor
           f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
           $highlighted_a_column = true
@@ -681,11 +675,6 @@ end
 ## formats the data with number, mark and details
 # 2019-03-09 - at some time this got renamed to `format` which is a kernel
 #  method and this overshadowed that method.
-#  NOTE: this does not do any coloring since the codes may get chopped by
-#   columnate method
-#   TODO 2019-03-23 - 23:30 we can do coloring here. columnate must check for color
-#   code at start of line, and check size accordingly. If it needs to truncate, then
-#   first take off the ANSI codes, truncate and put back.
 def _format(ary)
   # buff = Array.new
   buff = Array.new(ary.size)
@@ -726,6 +715,8 @@ def _format(ary)
         f = format('%10s  %s  %s', '?', '??????????', f)
       end
     end
+
+    # FIXME this will not work in long listing !!
     color = color_for f
 
     s = "#{ind}#{mark}#{cur}#{f}"
@@ -751,7 +742,7 @@ end
 
 def color_for fname
   extension = File.extname(fname)
-  color = $color_for[extension]
+  color = $ls_color[extension]
   return color if color
 
   # check file against patterns
@@ -768,7 +759,14 @@ def color_for fname
     end
   end
   # check filetypes
-  return $ls_ftype[File.ftype(fname)]
+  @log.debug "File:#{fname}"
+  if File.exist? fname
+  # @log.debug "Filetype:#{File.ftype(fname)}"
+    return $ls_ftype[File.ftype(fname)]
+  else
+    @log.warn "FILE WRONG: #{fname}"
+  end
+  nil
 end
 
 def parse_ls_colors
@@ -785,7 +783,7 @@ def parse_ls_colors
     colr = "\e[" + colr + 'm'
     if e.start_with? '*.'
       # extension, avoid '*' and use the rest as key
-      $color_for[patt[1..-1]] = colr
+      $ls_color[patt[1..-1]] = colr
     elsif e[0] == '*'
       # file pattern, this would be a glob pattern not regex
       # only for files not directories
@@ -1267,11 +1265,11 @@ def main_menu
     '2' => :select_from_used_dirs,
     :t => :dirtree,
     '4' => :tree,
-    :s => :sort_menu,
+    :o => :sort_menu,
     :F => :filter_menu,
     :c => :command_menu,
     :b => :bookmark_menu,
-    :y => :selection_menu,
+    :s => :selection_menu,
     :B => :bindkey_ext_command,
     :M => :create_a_dir,
     '%' => :create_a_file,
@@ -1334,6 +1332,7 @@ def toggle_menu
 
   case menu_text
   when :toggle_hidden
+    # zsh D - dot files should show
     $hidden = $hidden ? nil : 'D'
     # pause "Show hidden files is now #{!$hidden.nil?}. Press a key."
     message "Show hidden is now #{!$hidden.nil?}"
@@ -1390,15 +1389,19 @@ def toggle_menu
 end
 
 def sort_menu
+  # zsh o = order, O = reverse order
   lo = nil
   h = { m: :modified, a: :accessed, M: :oldest,
-        l: :largest, s: :smallest, n: :name, r: :rev_name, d: :dirs, c: :clear }
+        l: :largest, s: :smallest, n: :name, r: :rev_name, d: :dirs, c: :inode,
+       z: :clear}
   _, menu_text = menu 'Sort Menu', h
   case menu_text
   when :modified
     lo = 'om'
   when :accessed
     lo = 'oa'
+  when :inode
+    lo = 'oc'
   when :oldest
     lo = 'Om'
   when :largest
@@ -1418,9 +1421,6 @@ def sort_menu
   $sorto = lo
   message "Sorted on #{menu_text}"
   rescan_required
-  # $files = `zsh -c 'print -rl -- *(#{lo}#{$hidden}M)'`.split("\n") if lo
-  # $title = nil
-  # $files =$(eval "print -rl -- ${pattern}(${MFM_LISTORDER}$filterstr)")
 end
 
 # thse need to be placed in correct position, some do nothing
@@ -1452,7 +1452,8 @@ def command_menu
   when :locate
     locate
   when :today
-    # FIXME: use filterstring
+    # zshglob: M = MARK_DIRS with slash
+    # zshglob: 'm0' 'm' = modified time, '0' = 0 days ago
     $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
     $title = "Today's files"
   when :default_command
@@ -1501,18 +1502,22 @@ def filter_menu
   case menu_text
   when :dirs
     $filterstr = '/M'
+    # zsh /M MARK_DIRS appends trailing '/' to directories
     files = `zsh -c 'print -rl -- *(#{$sorto}/M)'`.split("\n")
     $title = 'Filter: directories only'
   when :files
     $filterstr = '.'
+    # zsh '.' for files, '/' for dirs
     files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.)'`.split("\n")
     $title = 'Filter: files only'
   when :emptydirs
     $filterstr = '/D^F'
+    # zsh F = full dirs, ^F empty dirs
     files = `zsh -c 'print -rl -- *(#{$sorto}/D^F)'`.split("\n")
     $title = 'Filter: empty directories'
   when :emptyfiles
     $filterstr = '.L0'
+    # zsh .L size in bytes
     files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.L0)'`.split("\n")
     $title = 'Filter: empty files'
   when :reduce_list
@@ -1740,13 +1745,15 @@ end
 
 def child_dirs
   $title = 'Directories in current directory'
+  # M is MARK_DIRS option for putting trailing slash after dir
   $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
   message "#{$files.size} files."
   # redraw
 end
 
 def dirtree
-  $title = 'Child directories with depth'
+  $title = 'Child directories recursive'
+  # zsh **/ is recursive
   $files = `zsh -c 'print -rl -- **/*(/#{$sorto}#{$hidden}M)'`.split("\n")
   message "#{$files.size} files."
   # redraw
@@ -1768,6 +1775,8 @@ end
 def recent_files
   # print -rl -- **/*(Dom[1,10])
   $title = 'Recent files'
+  # zsh D DOT_GLOB, show dot files
+  # zsh om order on modification time
   $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n").reject {|f| f[0] == '.'}
   # redraw
 end
@@ -2494,6 +2503,9 @@ end
 # prompt for scripts to execute, giving selected file names
 # NOTE: TODO 2019-03-21 - some scripts can output a filelist to display
 def scripts
+  write_selected_files
+  # some scripts may work with the selected_files and not want to be called
+  #  with filenames.
   title = 'Select a script'
   script_path = '~/.config/cetus/scripts'
   # TODO write selected files to a known file before calling
@@ -2515,20 +2527,22 @@ end
 
 # ------------------- view_selected_files ------------------ #
 def view_selected_files
-  require 'tempfile'
-  file = Tempfile.new('selected_files')
-  begin
-    $selected_files.each { |row| file.puts row }
-    file.flush
-    system "$PAGER #{file.path}"
-    setup_terminal
-  rescue
-    file.close
-    file.unlink
-  end
+  fname = write_selected_files
+  system "$PAGER #{fname}"
+  setup_terminal
 end
 # ------------- end of view_selected_files --------------------------------#
 
+# write selected files to a file and return path
+def write_selected_files
+  fname = File.join(File.dirname(CONFIG_FILE), 'selected_files')
+  fname = File.expand_path(fname)
+
+  File.open(fname, 'w') do |file|
+    $selected_files.each { |row| file.puts row }
+  end
+  return fname
+end
 ##
 # Editing of the User Dir List.
 # remove current entry from used dirs list, since we may not want some entries being there
@@ -2577,15 +2591,22 @@ end
 def enhance_file_list
   return unless $enhanced_mode
 
+  # zshglob: M = MARK_DIRS with slash
+  # zshglob: N = NULL_GLOB no error if no result, this is causing space to split
+  #  file sometimes for single file.
+
   # if only one entry and its a dir
   # get its children and maybe the recent mod files a few
-
   if $files.size == 1
     # its a dir, let give the next level at least
     if $files.first[-1] == '/'
       d = $files.first
-      f = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
+      # zshglob: 'om' = ordered on modification time
+      f = `zsh -c 'print -rn -- #{d}*(omM)'`.split("\n")
+      # TODO: use ruby this throws errors if not files
       if f && !f.empty?
+        @log.debug "CONCAT: #{f}"
+        @log.debug "CONCAT: #{f}"
         $files.concat f
         $files.concat get_important_files(d)
         return
@@ -2597,29 +2618,34 @@ def enhance_file_list
   end
   #
   # check if a ruby project dir, although it could be a backup file too,
-  # if so , expand lib and maby bin, put a couple recent files
+  # if so , expand lib and maybe bin, put a couple recent files
   #
   if $files.index('Gemfile') || !$files.grep(/\.gemspec/).empty?
     # usually the lib dir has only one file and one dir
     flg = false
     $files.concat get_important_files(Dir.pwd)
     if $files.index('lib/')
-      f = `zsh -c 'print -rl -- lib/*(om[1,5]M)'`.split("\n")
+      # get first five entries by modification time
+      f = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
       if f && !f.empty?
         insert_into_list('lib/', f)
         flg = true
       end
+
+      # look into lib file for that project
       dd = File.basename(Dir.pwd)
       if f.index("lib/#{dd}/")
-        f = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]M)'`.split("\n")
+        f = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
         if f && !f.empty?
           insert_into_list("lib/#{dd}/", f)
           flg = true
         end
       end
     end
+
+    # look into bin directory and get first five modified files
     if $files.index('bin/')
-      f = `zsh -c 'print -rl -- bin/*(om[1,5]M)'`.split("\n")
+      f = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
       insert_into_list('bin/', f) if f && !f.empty?
       flg = true
     end
@@ -2630,20 +2656,48 @@ def enhance_file_list
   end
   return if $files.size > 15
 
-  ## first check accessed else modified will change accessed
-  moda = `zsh -c 'print -rn -- *(/oa[1]M)'`
+  # Get most recently accessed directory
+  ## NOTE: first check accessed else modified will change accessed
+  # 2019-03-28 - adding NULL_GLOB breaks file name on spaces
+  # print -n : don't add newline
+  zzmoda = `zsh -c 'print -rn -- *(/oa[1]MN)'`
+  zzmoda = nil if zzmoda == ''
+  moda = get_most_recently_accessed_dir
+  raise "Error 2663 #{zzmoda} != #{moda}" if zzmoda != moda
   if moda && moda != ''
-    modf = `zsh -c 'print -rn -- #{moda}*(oa[1]M)'`
+
+    # get most recently accessed file in that directory
+    # NOTE: adding NULL_GLOB splits files on spaces
+    zzmodf = `zsh -c 'print -rl -- #{moda}*(oa[1]M)'`.chomp
+    zzmodf = nil if zzmodf == ''
+    modf = get_most_recently_accessed_file moda
+    raise "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class}" if zzmodf != modf
+
     insert_into_list moda, modf if modf && modf != ''
-    modm = `zsh -c 'print -rn -- #{moda}*(om[1]M)'`
+
+    # get most recently modified file in that directory
+    zzmodm = `zsh -c 'print -rn -- #{moda}*(om[1]M)'`.chomp
+    modm = get_most_recently_modified_file moda
+    zzmodm = nil if zzmodm == ''
+    raise "Error 2678 #{zzmodm} != #{modm}" if zzmodm != modm
     insert_into_list moda, modm if modm && modm != '' && modm != modf
   end
-  ## get last modified dir
-  modm = `zsh -c 'print -rn -- *(/om[1]M)'`
+
+  ## get most recently modified dir
+  zzmodm = `zsh -c 'print -rn -- *(/om[1]M)'`
+  zzmodm = nil if zzmodm == ''
+  modm = get_most_recently_modified_dir
+  raise "Error 2686 #{zzmodm} != #{modm}" if zzmodm != modm
   if modm != moda
+
+    # get most recently accessed file in that directory
     modmf = `zsh -c 'print -rn -- #{modm}*(oa[1]M)'`
+    modmf = get_most_recently_accessed_file modm
     insert_into_list modm, modmf
+
+    # get most recently modified file in that directory
     modmf1 = `zsh -c 'print -rn -- #{modm}*(om[1]M)'`
+    modmf1 = get_most_recently_modified_file modm
     insert_into_list(modm, modmf1) if modmf1 != modmf
   else
     # if both are same then our options get reduced so we need to get something more
@@ -2653,7 +2707,9 @@ def enhance_file_list
 end
 
 # insert important files to end of $files
-def insert_into_list(_dir, file)
+def insert_into_list _dir, file
+  @log.debug "INSERT: " + file.class.to_s
+  @log.debug "INSERT: " + file.to_s
   # ix = $files.index(dir)
   # raise "something wrong can find #{dir}." unless ix
   # $files.insert ix, *file
@@ -2684,6 +2740,45 @@ def get_important_files dir
   list.concat list1
   list
 end
+
+def get_most_recently_accessed_dir dir='.'
+  file = Dir.glob(dir + '/*')
+            .select { |f| File.directory?(f) }
+            .max_by { |f| File.atime(f) }
+  return File.basename(file) + '/' if file
+
+  return nil
+end
+
+def get_most_recently_accessed_file dir='.'
+  file = Dir.glob(dir + '/*')
+            .select { |f| File.file?(f) }
+            .max_by { |f| File.atime(f) }
+  # return File.basename(file) if file
+  return file.gsub('//','/') if file
+
+  return nil
+end
+
+def get_most_recently_modified_file dir='.'
+  file = Dir.glob(dir + '/*')
+            .select { |f| File.file?(f) }
+            .max_by { |f| File.mtime(f) }
+  # return File.basename(file) if file
+  return file.gsub('//','/') if file
+
+  return nil
+end
+
+def get_most_recently_modified_dir dir='.'
+  file = Dir.glob(dir + '/*')
+            .select { |f| File.directory?(f) }
+            .max_by { |f| File.mtime(f) }
+  return File.basename(file) +'/' if file
+
+  return nil
+end
+
 
 # set message which will be displayed in status line
 def message mess
@@ -2733,9 +2828,6 @@ def run
   # forever loop that prints dir and takes a key
   loop do
 
-    # moved the printing out of here
-    # TODO we need to call it from where required
-
     key = get_char
     resolve_key key
     redraw rescan?
@@ -2745,7 +2837,7 @@ def run
   write_curdir
   puts 'bye'
   config_write if $writing
-  @log.close if @log
+  @log&.close
 end
 
 run
