@@ -1,11 +1,12 @@
 # coding: utf-8
-lib = File.expand_path('../lib', __FILE__)
+
+# lib = File.expand_path('../lib', __FILE__)
+lib = File.expand_path('lib', __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
-#require 'cetus/version'
 
 Gem::Specification.new do |spec|
   spec.name          = 'cetus'
-  spec.version       = '0.1.29'
+  spec.version       = '0.1.30'
   spec.authors       = ['Rahul Kumar']
   spec.email         = ['oneness.univ@gmail.com']
   spec.description   = %q{lightning fast file navigator}
