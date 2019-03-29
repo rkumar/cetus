@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-29 14:41
+#  Last update: 2019-03-29 19:40
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -207,15 +207,20 @@ end
 
 # wrap readline so C-c can be ignored, but blank is taken as default
 def readline prompt='>'
+  last_line
+  # do we need to clear till end of line, see enter_regex commented
   # unhide cursor
   print "\e[?25h"
+  system 'stty echo'
   begin
     target = Readline.readline(prompt, true)
   rescue Interrupt
     return nil
   ensure
     # hide cursor
-    print "\e[?25l"
+    # NO LONGER HIDING cursor 2019-03-29 -
+    # print "\e[?25l"
+    system 'stty -echo'
   end
   target.chomp
 end
@@ -266,7 +271,10 @@ def get_char
   # end
   return c.chr if c
 ensure
-  system('stty -raw echo 2>/dev/null') # turn raw input on
+  # system('stty -raw echo 2>/dev/null') # turn raw input on
+  # 2019-03-29 - echo was causing printing of arrow key code on screen
+  # if moving fast
+  system('stty -raw 2>/dev/null') # turn raw input on
 end
 
 ## GLOBALS
@@ -297,7 +305,7 @@ $pager_command = {
   unknown: 'open'
 }
 $dir_position = {}
-$movement = false  # cursor movement has happened only, don't repaint
+$movement = $old_cursor = nil  # cursor movement has happened only, don't repaint
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -493,26 +501,47 @@ def draw_directory
   status_line
 
   # place cursor correctly, we will use this to highlight current row
-  place_cursor
 end
 
 # place cursor correctly, we will use this to highlight current row
 # XXX i am not sure how to highlight the bg without rewriting the text.
 # I can get the filename but it has been truncated.
 # I can get the earlier filename but the color has to be determined again.
+# FIXME flinks after paging
+# FIXME color of original hint lost
 def place_cursor
-  hint = get_shortcut($cursor)
-  if $cursor < $grows
+  # clear_cursor
+  # hint = get_shortcut($cursor)
+  c = $cursor - $sta
+  if c < $grows
     # FIXME: faster way of getting here ? see fff
-    system "tput cup #{$cursor + 2} 0"
-    print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
+    system "tput cup #{c + 2} 0"
+    # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
     return
   end
   wid = get_width $viewport.size, $grows
-  rows = $cursor % $grows
-  cols = ($cursor / $grows) * wid
+  rows = c % $grows
+  cols = (c / $grows) * wid
   system "tput cup #{rows + 2} #{cols}"
-  print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
+  # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
+end
+def clear_cursor
+  return unless $old_cursor
+
+  hint = get_shortcut($old_cursor)
+  if $old_cursor < $grows
+    # FIXME: faster way of getting here ? see fff
+    system "tput cup #{$old_cursor + 2} 0"
+    # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
+    print "#{hint}  "
+    return
+  end
+  wid = get_width $viewport.size, $grows
+  rows = $old_cursor % $grows
+  cols = ($old_cursor / $grows) * wid
+  system "tput cup #{rows + 2} #{cols}"
+  # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
+  print "#{hint}  "
 end
 
 def redraw_required(flag=true) $redraw_required = flag; end
@@ -608,6 +637,7 @@ def columnate ary, siz
       # f is not just filename but marker and hint
       # Check last char to see if directory
       linecolor = nil
+      # FIXME: even this should be done by color_for
       linecolor = BLUE if f[-1] == '/'
 
       # check to see if we need to truncate
@@ -620,7 +650,8 @@ def columnate ary, siz
         f = truncate_formatted_filename(f, unformatted_len, wid)
 
         if ix + $sta == $cursor
-          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+          # 2019-03-29 - no longer displaying cursor here since we don't always Callyy
+          # f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
           $highlighted_a_column = true
         elsif linecolor
           f = "#{linecolor}#{f}#{CLEAR}"
@@ -631,7 +662,8 @@ def columnate ary, siz
         ## we do the coloring before padding so the entire line does not get
         # padded, only file name
         if ix + $sta == $cursor
-          f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
+          # 2019-03-29 - no longer displaying cursor here since we don't always Callyy
+          # f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
           $highlighted_a_column = true
         elsif linecolor
           f = "#{linecolor}#{f}#{CLEAR}"
@@ -712,7 +744,7 @@ def format_array(ary)
     mark = SPACE
     mark = '+' if visited? f
     cur = SPACE
-    cur = CURMARK if ix + $sta == $cursor
+    # cur = CURMARK if ix + $sta == $cursor # 2019-03-29 - removed reduced calls
     # NOTE seems like f and ary[ix] are the same
     mark = GMARK if selected?(ary[ix])
 
@@ -1138,6 +1170,7 @@ end
 # If lower case character given, then go to first file starting with char.
 def goto_bookmark(key = nil)
   unless key
+    last_line
     print 'Enter bookmark char: '
     key = get_char
   end
@@ -1166,7 +1199,7 @@ end
 def enter_regex
   # print 'Enter (regex) pattern: '
   # move to beginning of line, and clear till EOL
-  print "\r\e[K"
+  # print "\r\e[K"
   $patt = readline '/'
 end
 
@@ -1176,12 +1209,15 @@ def next_page
   $cursor += $pagesize
   $sta = $cursor if $sta > $cursor
   $stact = 0
+  $old_cursor = nil
   redraw_required
 end
 
 def prev_page
   $sta -= $pagesize
   $cursor -= $pagesize
+  $old_cursor = nil
+  # FIXME: check cursor sanity and if not changed then no redraw
   redraw_required
 end
 
@@ -1668,9 +1704,9 @@ end
 def create_bookmark
 
   print 'Enter A to Z or 0-9 to create a bookmark: '
-  print "\e[?25h" # unhide cursor
+  # print "\e[?25h" # unhide cursor
   key = get_char
-  print "\e[?25l" # hide cursor
+  # print "\e[?25l" # hide cursor
   if key =~ /^[0-9A-Z]$/
     # $bookmarks[key] = "#{Dir.pwd}:#{$cursor}"
     $bookmarks[key] = Dir.pwd
@@ -2280,10 +2316,12 @@ end
 
 def cursor_dn
   $movement = true
+  $old_cursor = $cursor
   moveto(pos + 1)
 end
 
 def cursor_up
+  $old_cursor = $cursor
   $movement = true
   moveto(pos - 1)
 end
@@ -2303,6 +2341,7 @@ def moveto(position)
   # FIXME not correct, it must stop at end or correctly cycle
   # sta goes to 0 but cursor remains at 70
   # viewport.size may be wrong here, maybe should be pagesize only
+  oldsta = $sta
   if $cursor - $sta >= $pagesize
     $sta += $pagesize
   # elsif $sta - $cursor >= $viewport.size
@@ -2311,6 +2350,8 @@ def moveto(position)
     $sta -= $pagesize
     # $sta = $cursor
   end
+
+  $movement = nil if oldsta != $sta # we need to redraw
 
   star = [orig, $cursor].min
   fin = [orig, $cursor].max
@@ -2327,7 +2368,7 @@ def moveto(position)
     # $selected_files.concat $view[star..fin]
     add_to_selection $view[star..fin]
   end
-ensure
+# ensure
   # redraw
 end
 
@@ -2682,10 +2723,11 @@ def enhance_file_list
 
     # get most recently accessed file in that directory
     # NOTE: adding NULL_GLOB splits files on spaces
+    # FIXME: this zsh one gave a dir instead of file.
     zzmodf = `zsh -c 'print -rl -- #{moda}*(oa[1]M)'`.chomp
     zzmodf = nil if zzmodf == ''
     modf = get_most_recently_accessed_file moda
-    raise "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class}" if zzmodf != modf
+    raise "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class} : Loc: #{Dir.pwd}" if zzmodf != modf
 
     insert_into_list moda, modf if modf && modf != ''
 
@@ -2835,6 +2877,7 @@ def run
   parse_ls_colors
 
   redraw true
+  place_cursor
 
   # do we need this, have they changed after redraw
   $patt = nil
@@ -2845,7 +2888,13 @@ def run
 
     key = get_char
     resolve_key key
+    if $movement && $old_cursor
+      place_cursor
+      $movement = false
+      next
+    end
     redraw rescan?
+    place_cursor
 
     break if $quitting
   end
