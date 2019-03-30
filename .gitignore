@@ -16,3 +16,16 @@ tmp
 .yardoc
 _yardoc
 doc/
+Gemfile.lock
+README.NOW
+a test directory/
+archived.txt
+bug
+column.rb
+gemenv.txt
+index.html
+log.txt
+oldlib/
+tada.txt
+todo
+todo.notes
