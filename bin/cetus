@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-29 19:40
+#  Last update: 2019-03-30 15:01
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -38,7 +38,7 @@ require 'logger'
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.30.0'.freeze
+VERSION = '0.1.31.0'.freeze
 CONFIG_FILE = '~/.config/cetus/conf.yml'.freeze
 
 # $bindings = {}
@@ -427,16 +427,23 @@ def print_title
   $title ||= Dir.pwd.sub(ENV['HOME'], '~')
   fin = $sta + $viewport.size
   fl = $view.size
-  t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
+  if fl.zero?
+    t = "#{$title}  No files."
+  else
+    t = "#{$title}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
+  end
 
   # don't exceed columns while printing
   t = t[t.size - $gcols..-1] if t.size >= $gcols
 
   print "#{BOLD}#{t}#{CLEAR}\n"
+  print "EMPTY" if fl.zero?
 end
 # ------------- end of print_title --------------------------------#
 
 # TODO: clean this up and simplify it
+# NOTE: earlier this was called on every key (up-arow down arrow, now only
+# called when page changes, so we only put directory name)
 def status_line
     # prompt
     v_mm = $mode ? "[#{$mode}] " : ''
@@ -450,9 +457,10 @@ def status_line
     # sometimes due to search, there is no file
     if cf
       if @debug_flag
+        # XXX this will not work on file basis FIXME
         print_on_right "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
       else
-        print_on_right "#{cf}"
+        print_on_right "#{Dir.pwd}"
       end
     end
     # move to beginning of line, reset text mode after printing
@@ -1088,10 +1096,10 @@ end
 ## accept dir to goto and change to that ( can be a file too)
 def goto_dir
   # print "\e[?25h"
-  print_last_line 'Enter path: '
+  # print_last_line 'Enter path: '
   begin
     # path = gets.chomp
-    path = readline
+    path = readline 'Enter path to go to: '
     if path.nil? || path == ''
       clear_status_line
       return
@@ -1284,6 +1292,10 @@ def debug_vars
     file.puts "view.size      #{$view.size}"
     file.puts "grows          #{$grows}"
     file.puts "file   #{current_file}"
+    file.puts
+    file.puts `file #{current_file}`
+    file.puts
+    file.puts %x[stat   #{current_file}]
   end
   redraw_required
 end
@@ -1352,6 +1364,7 @@ end
 def menu title, h
   return unless h
 
+  last_line # 2019-03-30 - required since cursor is not longer at bottom
   pbold title.to_s
   # h.each_pair { |k, v| puts " #{k}: #{v}" }
   # 2019-03-09 - trying out using `column` to print in cols
@@ -1573,11 +1586,14 @@ def filter_menu
   when :extension
     files = filter_for_current_extension
   end
-  if files
+  if files && files.count > 0
     $files = files
     $stact = 0
-    $message = "Filtered on #{menu_text}"
+    $message = "Filtered on #{menu_text}. Press ESC to return."
     # redraw
+  else
+    perror 'Sorry, No files. '
+    $title = nil
   end
 end
 
@@ -2240,12 +2256,13 @@ def ag
 end
 
 def ffind
-  print 'Enter a file name pattern to find: '
-  pattern = readline
+  last_line
+  # print 'Enter a file name pattern to find: '
+  pattern = readline '! find . -iname :'
   return if pattern == ''
 
   $title = "Files found using 'find' #{pattern}"
-  files = `find . -name "#{pattern}"`.split("\n")
+  files = `find . -iname "#{pattern}"`.split("\n")
   if files.empty?
     perror 'No files found. Try adding *'
   else
