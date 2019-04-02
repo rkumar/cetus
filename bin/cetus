@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-03-31 14:30
+#  Last update: 2019-04-02 09:52
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -469,7 +469,7 @@ def status_line
 end
 
 def print_debug_info cf=current_file()
-  print_on_right "#{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
+  print_on_right "= #{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
 end
 
 # should we do a read of the dir
@@ -773,6 +773,8 @@ def format_array(ary)
     # NOTE seems like f and ary[ix] are the same
     mark = GMARK if selected?(ary[ix])
 
+    color = color_for f
+
     if $long_listing
       begin
         if File.exist? f
@@ -787,13 +789,13 @@ def format_array(ary)
         f = format('%10s  %s  %s', readable_file_size(stat.size, 1),
                    date_format(stat.mtime), f)
       rescue StandardError => e
+        @log.warn "WARN::#{e}: FILE:: #{f}"
         f = format('%10s  %s  %s', '?', '??????????', f)
       end
     end
 
-    # FIXME this will not work in long listing !!
-    # can we move this before earlie block
-    color = color_for f
+    # 2019-03-31 - replace unprintable chars with ?
+    f = f.gsub(/[^[:print:]]/, '?')
 
     s = "#{ind}#{mark}#{cur}#{f}"
     if color
@@ -1165,7 +1167,11 @@ def goto_parent_dir
   #  parent dir, not first
   curr = File.basename(Dir.pwd)
 
+  return if curr == '/'
+
   change_dir '..'
+
+  return if curr == Dir.pwd
 
   # get index of child dir in this dir, and set cursor to it.
   index = $files.index(curr + '/')
@@ -1309,9 +1315,9 @@ def debug_vars
     file.puts "grows          #{$grows}"
     file.puts "file   #{current_file}"
     file.puts
-    file.puts `file #{current_file}`
+    file.puts `file "#{current_file}"`
     file.puts
-    file.puts %x[stat   #{current_file}]
+    file.puts %x[stat   "#{current_file}"]
   end
   redraw_required
 end
@@ -1624,7 +1630,7 @@ end
 
 def reduce pattern=nil
   unless pattern
-    print 'Enter a pattern to reduce current list: '
+    last_line 'Enter a pattern to reduce current list: '
     pattern = gets.chomp
   end
   $title = "Filter: pattern #{pattern}"
@@ -1898,6 +1904,7 @@ def perror text
 end
 
 def pause text=' Press a key.'
+  last_line
   print text
   get_char
 end
@@ -2698,12 +2705,19 @@ def enhance_file_list
 
   # if only one entry and its a dir
   # get its children and maybe the recent mod files a few
+  # FIXME: simplify condition into one
   if $files.size == 1
     # its a dir, let give the next level at least
     if $files.first[-1] == '/'
       d = $files.first
       # zshglob: 'om' = ordered on modification time
-      f = `zsh -c 'print -rn -- #{d}*(omM)'`.split("\n")
+      f1 = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
+      f = get_files_by_mtime(d)
+
+      @log.warn "f1:#{f1} != f:#{f} in #{d}" if f1 != f
+      # order returned by zsh and ruby are different since the time is the same
+      # raise "f1 != f in #{d}" if f1 != f
+
       # TODO: use ruby this throws errors if not files
       if f && !f.empty?
         @log.debug "CONCAT: #{f}" if @debug_flag
@@ -2719,14 +2733,16 @@ def enhance_file_list
   #
   # check if a ruby project dir, although it could be a backup file too,
   # if so , expand lib and maybe bin, put a couple recent files
-  #
+  # FIXME: gemspec file will be same as current folder
   if $files.index('Gemfile') || !$files.grep(/\.gemspec/).empty?
     # usually the lib dir has only one file and one dir
     flg = false
     $files.concat get_important_files(Dir.pwd)
     if $files.index('lib/')
       # get first five entries by modification time
-      f = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
+      f1 = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
+      f = get_files_by_mtime('lib')&.first(5)
+      @log.warn "f1 #{f1} != #{f} in lib" if f1 != f
       if f && !f.empty?
         insert_into_list('lib/', f)
         flg = true
@@ -2735,7 +2751,9 @@ def enhance_file_list
       # look into lib file for that project
       dd = File.basename(Dir.pwd)
       if f.index("lib/#{dd}/")
-        f = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
+        f1 = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
+        f = get_files_by_mtime("lib/#{dd}")&.first(5)
+        @log.warn "2756 f1 #{f1} != #{f} in lib/#{dd}" if f1 != f
         if f && !f.empty?
           insert_into_list("lib/#{dd}/", f)
           flg = true
@@ -2745,7 +2763,9 @@ def enhance_file_list
 
     # look into bin directory and get first five modified files
     if $files.index('bin/')
-      f = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
+      f1 = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
+      f = get_files_by_mtime("bin")&.first(5)
+      @log.warn "2768 f1 #{f1} != #{f} in bin/" if f1 != f
       insert_into_list('bin/', f) if f && !f.empty?
       flg = true
     end
@@ -2772,7 +2792,9 @@ def enhance_file_list
     zzmodf = `zsh -c 'print -rl -- #{moda}*(oa[1]M)'`.chomp
     zzmodf = nil if zzmodf == ''
     modf = get_most_recently_accessed_file moda
-    raise "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class} : Loc: #{Dir.pwd}" if zzmodf != modf
+    @log.warn "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class} : Loc: #{Dir.pwd}" if zzmodf != modf
+
+    raise "2784: #{modf}" if modf && !File.exist?(modf)
 
     insert_into_list moda, modf if modf && modf != ''
 
@@ -2780,7 +2802,9 @@ def enhance_file_list
     zzmodm = `zsh -c 'print -rn -- #{moda}*(om[1]M)'`.chomp
     modm = get_most_recently_modified_file moda
     zzmodm = nil if zzmodm == ''
-    raise "Error 2678 #{zzmodm} != #{modm}" if zzmodm != modm
+    @log.debug "Error 2678 (gmrmf) #{zzmodm} != #{modm} in #{moda}" if zzmodm != modm
+    raise "2792: #{modm}" if modm && !File.exist?(modm)
+
     insert_into_list moda, modm if modm && modm != '' && modm != modf
   end
 
@@ -2788,17 +2812,21 @@ def enhance_file_list
   zzmodm = `zsh -c 'print -rn -- *(/om[1]M)'`
   zzmodm = nil if zzmodm == ''
   modm = get_most_recently_modified_dir
-  raise "Error 2686 #{zzmodm} != #{modm}" if zzmodm != modm
+  @log.debug "Error 2686 rmd #{zzmodm} != #{modm}" if zzmodm != modm
+
   if modm != moda
 
     # get most recently accessed file in that directory
     modmf = `zsh -c 'print -rn -- #{modm}*(oa[1]M)'`
     modmf = get_most_recently_accessed_file modm
+    raise "2806: #{modmf}" if modmf && !File.exist?(modmf)
     insert_into_list modm, modmf
 
     # get most recently modified file in that directory
-    modmf1 = `zsh -c 'print -rn -- #{modm}*(om[1]M)'`
+    modmf11 = `zsh -c 'print -rn -- #{modm}*(om[1]M)'`
     modmf1 = get_most_recently_modified_file modm
+    raise "2812: #{modmf1}" if modmf1 && !File.exist?(modmf1)
+
     insert_into_list(modm, modmf1) if modmf1 != modmf
   else
     # if both are same then our options get reduced so we need to get something more
@@ -2812,6 +2840,11 @@ def insert_into_list _dir, file
   if @debug_flag
     @log.debug 'INSERT: ' + file.class.to_s
     @log.debug 'INSERT: ' + file.to_s
+  end
+  if file.class.to_s == 'String'
+    if !File.exist?(file)
+      raise "WRONGFILE: #{file}"
+    end
   end
   # ix = $files.index(dir)
   # raise "something wrong can find #{dir}." unless ix
@@ -2845,44 +2878,58 @@ def get_important_files dir
 end
 
 def get_most_recently_accessed_dir dir='.'
-  file = Dir.glob(dir + '/*')
-            .select { |f| File.directory?(f) }
-            .max_by { |f| File.atime(f) }
-  return File.basename(file) + '/' if file
-
-  return nil
+  gmr dir, :directory?, :atime
 end
 
 def get_most_recently_accessed_file dir='.'
-  file = Dir.glob(dir + '/*')
-            .select { |f| File.file?(f) }
-            .max_by { |f| File.atime(f) }
-  # return File.basename(file) if file
-  return file.gsub('//','/') if file
-
-  return nil
+  gmr dir, :file?, :atime
 end
 
 def get_most_recently_modified_file dir='.'
-  file = Dir.glob(dir + '/*')
-            .select { |f| File.file?(f) }
-            .max_by { |f| File.mtime(f) }
-  # return File.basename(file) if file
-  return file.gsub('//','/') if file
-
-  return nil
+  gmr dir, :file?, :mtime
 end
 
 def get_most_recently_modified_dir dir='.'
-  file = Dir.glob(dir + '/*')
-            .select { |f| File.directory?(f) }
-            .max_by { |f| File.mtime(f) }
-  return File.basename(file) +'/' if file
-
-  return nil
+  file = gmr dir, :directory?, :mtime
 end
 
+# get most recent file or directory, based on atime or mtime
+# dir is name of directory in which to get files, default is '.'
+# type is :file? or :directory?
+# func can be :mtime or :atime or :ctime or :birthtime
+def gmr dir, type, func
+  file = Dir.glob(dir + '/*')
+            .select { |f| File.send(type, f) }
+            .max_by { |f| File.send(func, f) }
+  file = File.basename(file) + '/' if file && type == :directory?
+  return file.gsub('//', '/') if file
 
+  nil
+end
+
+# return a list of entries sorted by mtime.
+# A / is added after to directories
+def get_files_by_mtime dir='*'
+  gfb dir, :mtime
+end
+
+def get_files_by_atime dir='.'
+  gfb dir, :atime
+end
+
+def gfb dir='.', func
+  dir += '/*' if File.directory?(dir)
+  dir = dir.gsub('//', '/')
+
+  sorted_files = Dir[dir].sort_by { |f| File.send(func, f) }.reverse
+  sorted_files.map do |f|
+    if File.directory?(f)
+      f + '/'
+    else
+      f
+    end
+  end
+end
 # set message which will be displayed in status line
 def message mess
   $message = mess
@@ -2904,8 +2951,8 @@ end
 
 def print_on_right text
   sz = text.size
-  # system "tput cup #{$glines} #{$gcols - sz -1}"
-  tput_cup $glines, $gcols - sz - 1
+  system "tput cup #{$glines} #{$gcols - sz - 1}"
+  # tput_cup $glines, $gcols - sz - 1
   print text
 end
 
@@ -2939,6 +2986,7 @@ def run
     key = get_char
     resolve_key key
     if $movement && $old_cursor
+      clear_status_line
       print_debug_info if @debug_flag
       # we may want to print debug info if flag is on
       place_cursor
