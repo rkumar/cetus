@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-02 09:52
+#  Last update: 2019-04-03 15:00
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -31,7 +31,7 @@ require 'shellwords'
 # https://docs.ruby-lang.org/en/2.6.0/FileUtils.html
 require 'fileutils'
 require 'logger'
-@log = Logger.new('log.txt')
+@log = Logger.new(File.expand_path '~/tmp/log.txt')
 
 ## INSTALLATION
 # copy into PATH
@@ -386,9 +386,10 @@ def read_directory
   $filterstr ||= 'M'
   $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   $files = sort_file_list $files
+  return unless $enhanced_mode
+
   enhance_file_list
-  ## added by RK 2014-03-31 - 00:29 since too many duplicates
-  $files = $files.uniq if $enhanced_mode
+  $files = $files.uniq
 end
 # ------------- end of read_directory --------------------------------#
 
@@ -1421,9 +1422,11 @@ def toggle_menu
 
   case menu_text
   when :toggle_hidden
+    # NOTE: now that I am shifting queries to ruby not sure this will continue
+    # FNM_DOTMATCH
+    #  working everywhere
     # zsh D - dot files should show
     $hidden = $hidden ? nil : 'D'
-    # pause "Show hidden files is now #{!$hidden.nil?}. Press a key."
     message "Show hidden is now #{!$hidden.nil?}"
     rescan_required
   when :toggle_case
@@ -1769,6 +1772,7 @@ end
 # Was this supposed to be augmented, or just remain limited like this
 # We should be able to do everything in the menus from here. TODO
 def subcommand
+  last_line
   print 'Enter command: q x wq p w e r h '
   begin
     command = readline
@@ -1779,6 +1783,7 @@ def subcommand
   if command == 'q'
     # FIXME: 2019-03-22 - should this not call quit_command ?
     if $modified
+      last_line
       print 'Do you want to save bookmarks? (y/n): '
       key = get_char
       if key == 'y'
@@ -1816,14 +1821,15 @@ end
 
 def quit_command
   if $modified
-    puts 'Press w to save bookmarks before quitting ' if $modified
-    print 'Press another q to quit '
+    last_line
+    puts 'Press y to save bookmarks before quitting ' if $modified
+    print 'Press n to quit without saving'
     key = get_char
   else
     $quitting = true
   end
-  $quitting = true if key == 'q'
-  $quitting = $writing = true if key == 'w'
+  $quitting = true if key == 'n'
+  $quitting = $writing = true if key == 'y'
 end
 
 def views
@@ -1841,15 +1847,31 @@ end
 def child_dirs
   $title = 'Directories in current directory'
   # M is MARK_DIRS option for putting trailing slash after dir
-  $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
-  message "#{$files.size} files."
+  # $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
+  # $files = Dir.glob("*", File::FNM_DOTMATCH).select {|f| File.directory?(f)} - %w[ . ..]
+  $files = dirs
+  message "#{$files.size} directories."
   # redraw
+end
+
+def dirs dir='*'
+  files = Dir.glob(dir, File::FNM_DOTMATCH).select {|f| File.directory?(f)} - %w[ . ..]
+  files = add_slash files
+  files
+end
+
+def add_slash files
+  return files.map do |f|
+    File.directory?(f) ? f + '/' : f
+  end
 end
 
 def dirtree
   $title = 'Child directories recursive'
   # zsh **/ is recursive
-  $files = `zsh -c 'print -rl -- **/*(/#{$sorto}#{$hidden}M)'`.split("\n")
+  files1 = `zsh -c 'print -rl -- **/*(/#{$sorto}#{$hidden}M)'`.split("\n")
+  $files = Dir['**/']
+  @log.debug "zsh #{files1} != rb #{$files}" if files1 != $files
   message "#{$files.size} files."
   # redraw
 end
@@ -1860,7 +1882,8 @@ end
 def tree
   # Caution: use only for small projects, don't use in root.
   $title = 'Full Tree'
-  $files = `zsh -c 'print -rl -- **/*(#{$sorto}#{$hidden}M)'`.split("\n")
+  # $files = `zsh -c 'print -rl -- **/*(#{$sorto}#{$hidden}M)'`.split("\n")
+  $files = Dir['**/*']
   message "#{$files.size} files."
   # redraw
 end
@@ -2038,7 +2061,7 @@ end
 #  from selection
 def file_actions(action = nil)
   # only add dtrx for gz
-  h = { d: :delete, m: :move, r: :rename, v: ENV['EDITOR'] || :vim,
+  h = { d: :delete, D: '/bin/rm', m: :move, r: :rename, v: ENV['EDITOR'] || :vim,
         c: :copy, C: :chdir, W: :remspace, e: :execute, s: :page_stat_for_file,
         l: :less, p: :most, f: :file, o: :open, x: :dtrx, z: :zip }
   # acttext = h[action.to_sym] || action
@@ -2088,11 +2111,14 @@ def file_actions(action = nil)
 
   when :delete
     delcommand = 'rmtrash'
-    print "#{delcommand} #{text} ?[yn?]: "
+    last_line
+    print "#{delcommand} #{text} ? [yn?]: "
     key = get_char
     view_selected_files if key == '?'
     return if key != 'y'
 
+    clear_status_line
+    print "\r deleting ..."
     system "#{delcommand} #{files}"
     refresh
 
@@ -2213,13 +2239,12 @@ def file_actions(action = nil)
   else
     return unless menu_text
 
-    print "#{menu_text} #{files}"
-    pause
-    print
+    @log.debug "#{menu_text} #{files}"
+    last_line
+    pause "#{menu_text} #{files}"
     system "#{menu_text} #{files}"
     setup_terminal
     refresh
-    pause
   end
 
   # remove non-existent files from select list due to move or delete
@@ -2716,7 +2741,6 @@ def enhance_file_list
 
       @log.warn "f1:#{f1} != f:#{f} in #{d}" if f1 != f
       # order returned by zsh and ruby are different since the time is the same
-      # raise "f1 != f in #{d}" if f1 != f
 
       # TODO: use ruby this throws errors if not files
       if f && !f.empty?
@@ -2783,7 +2807,7 @@ def enhance_file_list
   zzmoda = `zsh -c 'print -rn -- *(/oa[1]MN)'`
   zzmoda = nil if zzmoda == ''
   moda = get_most_recently_accessed_dir
-  raise "Error 2663 #{zzmoda} != #{moda}" if zzmoda != moda
+  @log.warn "Error 2663 #{zzmoda} != #{moda}" if zzmoda != moda
   if moda && moda != ''
 
     # get most recently accessed file in that directory
@@ -2820,6 +2844,7 @@ def enhance_file_list
     modmf = `zsh -c 'print -rn -- #{modm}*(oa[1]M)'`
     modmf = get_most_recently_accessed_file modm
     raise "2806: #{modmf}" if modmf && !File.exist?(modmf)
+
     insert_into_list modm, modmf
 
     # get most recently modified file in that directory
@@ -2857,22 +2882,26 @@ end
 # 2019-03-23 - not exactly clear what is happening XXX
 # this gets a directory (containing '/' at end)
 def get_important_files dir
+
   # checks various lists like visited_files and bookmarks
   # to see if files from this dir or below are in it.
   # More to be used in a dir with few files.
   list = []
   l = dir.size + 1
+
   # 2019-03-23 - i think we are getting the basename of the file
   #  if it is present in the given directory XXX
   $visited_files.each do |e|
     list << e[l..-1] if e.index(dir) == 0
   end
+
   # bookmarks if it starts with this directory then add it
   # FIXME it puts same directory cetus into the list with full path
   # We need to remove the base until this dir. get relative part
   list1 = $bookmarks.values.select do |e|
     e.index(dir) == 0 && e != dir
   end
+
   list.concat list1
   list
 end
@@ -2917,17 +2946,19 @@ def get_files_by_atime dir='.'
   gfb dir, :atime
 end
 
-def gfb dir='.', func
+# get files ordered by mtime or atime, returning latest first
+# dir is dir to get files in, default '.'
+# func can be :atime or :mtime or even :size or :ftype
+def gfb dir, func
   dir += '/*' if File.directory?(dir)
   dir = dir.gsub('//', '/')
 
+  # sort by time and then reverse so latest first.
   sorted_files = Dir[dir].sort_by { |f| File.send(func, f) }.reverse
+
+  # add slash to directories
   sorted_files.map do |f|
-    if File.directory?(f)
-      f + '/'
-    else
-      f
-    end
+    File.directory?(f) ? f + '/' : f
   end
 end
 # set message which will be displayed in status line
