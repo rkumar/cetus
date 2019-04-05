@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-03 15:00
+#  Last update: 2019-04-05 11:12
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -31,7 +31,8 @@ require 'shellwords'
 # https://docs.ruby-lang.org/en/2.6.0/FileUtils.html
 require 'fileutils'
 require 'logger'
-@log = Logger.new(File.expand_path '~/tmp/log.txt')
+# @log = Logger.new(File.expand_path '~/tmp/log.txt')
+@log = Logger.new('log.txt')
 
 ## INSTALLATION
 # copy into PATH
@@ -335,6 +336,7 @@ CURSOR_COLOR = REVERSE
 #   file pattern starting with '*' and a character that is not .
 #   File.ftype(path) returns
 #   file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
+
 # This hash contains color codes for extensions. It is updated from
 # LS_COLORS.
 $ls_color = {
@@ -361,7 +363,7 @@ $visited_dirs = []
 ## dirs where some work has been done, for saving and restoring
 $used_dirs = []
 # zsh o = order m = modified time
-$default_sort_order = 'om'
+$default_sort_order = 'Om'
 $sorto = $default_sort_order
 $viewctr = 0
 $history = []
@@ -384,14 +386,76 @@ def read_directory
   # zshglob M = MARK_DIRS
 
   $filterstr ||= 'M'
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
+  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
+  $files = list_files
   $files = sort_file_list $files
   return unless $enhanced_mode
 
   enhance_file_list
   $files = $files.uniq
 end
+
+# return a list of directory contents sorted as per sort order
+# NOTE: FNM_CASEFOLD does not work with Dir.glob
+def list_files dir='*', sorto=$sorto, hidden=$hidden, filter=$filterstr
+
+  dir += '/*' if File.directory?(dir)
+  dir = dir.gsub('//', '/')
+
+  # decide sort method based on second character
+  # first char is o or O (reverse)
+  # second char is macLn etc (as in zsh glob)
+  so = sorto ? sorto[1] : nil
+  func = case so
+         when 'm'
+           :mtime
+         when 'a'
+           :atime
+         when 'c'
+           :ctime
+         when 'L'
+           :size
+         when 'n'
+           :path
+         end
+
+  # sort by time and then reverse so latest first.
+  sorted_files = if hidden == 'D'
+                   Dir.glob(dir, File::FNM_DOTMATCH)
+                 else
+                   Dir.glob(dir)
+                 end
+
+  # WARN: crashes on a dead link since no mtime
+  # HACK: use first files return value for bad link
+  if func
+    sorted_files = sorted_files.sort_by do |f|
+      if File.exist? f
+        File.send(func, f)
+      else
+        sys_stat(f, func)
+      end
+    end
+  end
+
+  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && $ignorecase
+
+  # zsh gives mtime sort with latest first, ruby gives latest last
+  sorted_files.reverse! if sorto[0] == 'O'
+
+  # add slash to directories
+  sorted_files = add_slash sorted_files
+  return sorted_files
+end
 # ------------- end of read_directory --------------------------------#
+
+# this is just a tempo method to deal with dead links.
+# I should be doing a system stat and parsing that
+def sys_stat file, func
+  return unless File.symlink? file
+
+  return File.lstat(file).send(func)
+end
 
 # ------------------- create_viewport ------------------ #
 def create_viewport
@@ -781,9 +845,14 @@ def format_array(ary)
         if File.exist? f
           stat = File.stat(f)
         else
-          # remove last character and get stat
-          last = f[-1]
-          stat = File.stat(f.chop) if last == ' ' || last == '@' || last == '*'
+          # dead link
+          if File.symlink?(f)
+            stat = File.lstat(f)
+          else
+            # remove last character and get stat
+            last = f[-1]
+            stat = File.stat(f.chop) if last == ' ' || last == '@' || last == '*'
+          end
         end
         # this is for saved directories etc which are shortened
         stat ||= File.stat(File.expand_path(f))
@@ -824,6 +893,7 @@ def color_for fname
       # if fname.match?(/k/)
       if fname =~ /#{k}/
         # @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
+        @log.debug "#{fname} matched #{k}. color is #{v}"
         return v
       # else
         # @log.debug "#{fname} di not match #{k}. color is #{v[1..-2]}"
@@ -836,6 +906,8 @@ def color_for fname
   # @log.debug "Filetype:#{File.ftype(fname)}"
     return $ls_ftype[File.ftype(fname)]
   else
+    # orphan file
+    return $ls_ftype['or'] if File.symlink?(fname)
     @log.warn "FILE WRONG: #{fname}"
   end
   nil
@@ -856,6 +928,7 @@ def parse_ls_colors
     if e.start_with? '*.'
       # extension, avoid '*' and use the rest as key
       $ls_color[patt[1..-1]] = colr
+      @log.debug "COLOR: Writing extension (#{patt})."
     elsif e[0] == '*'
       # file pattern, this would be a glob pattern not regex
       # only for files not directories
@@ -867,10 +940,20 @@ def parse_ls_colors
       patt = "^#{patt}" if patt[0] != '.'
       patt = "#{patt}$" if patt[-1] != '*'
       $ls_pattern[patt] = colr
-      @log.debug "Writing pattern (#{patt})."
+      @log.debug "COLOR: Writing file (#{patt})."
     elsif patt.length == 2
       # file type, needs to be mapped to what ruby will return
-#   file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
+      # file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
+      # di = directory
+      # fi = file
+      # ln = symbolic link
+      # pi = fifo file
+      # so = socket file
+      # bd = block (buffered) special file
+      # cd = character (unbuffered) special file
+      # or = symbolic link pointing to a non-existent file (orphan)
+      # mi = non-existent file pointed to by a symbolic link (visible when you type ls -l)
+      # ex = file which is executable (ie. has 'x' set in permissions).
       case patt
       when 'di'
         $ls_ftype['directory'] = colr
@@ -887,6 +970,7 @@ def parse_ls_colors
       else
         $ls_ftype[patt] = colr
       end
+      @log.debug "COLOR: ftype #{patt}"
     end
   end
 end
@@ -1095,10 +1179,11 @@ def refresh
 end
 
 # put directories first, then files
-def sort_file_list(_files)
-  _dirs = $files.select { |f| File.directory?(f) }
-  _files = $files.select { |f| File.file?(f) }
-  _dirs + _files
+def sort_file_list files
+  dirs = files.select { |f| File.directory?(f) }
+  # earlier I had File? which removed links, esp dead ones
+  fi   = files.select { |f| !File.directory?(f) }
+  dirs + fi
 end
 
 ## unselect all files
@@ -1485,20 +1570,21 @@ end
 
 def sort_menu
   # zsh o = order, O = reverse order
+  # ruby mtime/atime/ctime come reversed so we have to change o to O
   lo = nil
   h = { m: :modified, a: :accessed, M: :oldest,
         l: :largest, s: :smallest, n: :name, r: :rev_name, d: :dirs, c: :inode,
-       z: :clear}
+        z: :clear }
   _, menu_text = menu 'Sort Menu', h
   case menu_text
   when :modified
-    lo = 'om'
-  when :accessed
-    lo = 'oa'
-  when :inode
-    lo = 'oc'
-  when :oldest
     lo = 'Om'
+  when :accessed
+    lo = 'Oa'
+  when :inode
+    lo = 'Oc'
+  when :oldest
+    lo = 'om'
   when :largest
     lo = 'OL'
   when :smallest
@@ -2736,10 +2822,10 @@ def enhance_file_list
     if $files.first[-1] == '/'
       d = $files.first
       # zshglob: 'om' = ordered on modification time
-      f1 = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
+      # f1 = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
       f = get_files_by_mtime(d)
 
-      @log.warn "f1:#{f1} != f:#{f} in #{d}" if f1 != f
+      # @log.warn "f1:#{f1} != f:#{f} in #{d}" if f1 != f
       # order returned by zsh and ruby are different since the time is the same
 
       # TODO: use ruby this throws errors if not files
@@ -2764,9 +2850,9 @@ def enhance_file_list
     $files.concat get_important_files(Dir.pwd)
     if $files.index('lib/')
       # get first five entries by modification time
-      f1 = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
+      # f1 = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
       f = get_files_by_mtime('lib')&.first(5)
-      @log.warn "f1 #{f1} != #{f} in lib" if f1 != f
+      # @log.warn "f1 #{f1} != #{f} in lib" if f1 != f
       if f && !f.empty?
         insert_into_list('lib/', f)
         flg = true
@@ -2775,9 +2861,9 @@ def enhance_file_list
       # look into lib file for that project
       dd = File.basename(Dir.pwd)
       if f.index("lib/#{dd}/")
-        f1 = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
+        # f1 = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
         f = get_files_by_mtime("lib/#{dd}")&.first(5)
-        @log.warn "2756 f1 #{f1} != #{f} in lib/#{dd}" if f1 != f
+        # @log.warn "2756 f1 #{f1} != #{f} in lib/#{dd}" if f1 != f
         if f && !f.empty?
           insert_into_list("lib/#{dd}/", f)
           flg = true
@@ -2787,9 +2873,9 @@ def enhance_file_list
 
     # look into bin directory and get first five modified files
     if $files.index('bin/')
-      f1 = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
+      # f1 = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
       f = get_files_by_mtime("bin")&.first(5)
-      @log.warn "2768 f1 #{f1} != #{f} in bin/" if f1 != f
+      # @log.warn "2768 f1 #{f1} != #{f} in bin/" if f1 != f
       insert_into_list('bin/', f) if f && !f.empty?
       flg = true
     end
@@ -2804,51 +2890,51 @@ def enhance_file_list
   ## NOTE: first check accessed else modified will change accessed
   # 2019-03-28 - adding NULL_GLOB breaks file name on spaces
   # print -n : don't add newline
-  zzmoda = `zsh -c 'print -rn -- *(/oa[1]MN)'`
-  zzmoda = nil if zzmoda == ''
+  # zzmoda = `zsh -c 'print -rn -- *(/oa[1]MN)'`
+  # zzmoda = nil if zzmoda == ''
   moda = get_most_recently_accessed_dir
-  @log.warn "Error 2663 #{zzmoda} != #{moda}" if zzmoda != moda
+  # @log.warn "Error 2663 #{zzmoda} != #{moda}" if zzmoda != moda
   if moda && moda != ''
 
     # get most recently accessed file in that directory
     # NOTE: adding NULL_GLOB splits files on spaces
     # FIXME: this zsh one gave a dir instead of file.
-    zzmodf = `zsh -c 'print -rl -- #{moda}*(oa[1]M)'`.chomp
-    zzmodf = nil if zzmodf == ''
+    # zzmodf = `zsh -c 'print -rl -- #{moda}*(oa[1]M)'`.chomp
+    # zzmodf = nil if zzmodf == ''
     modf = get_most_recently_accessed_file moda
-    @log.warn "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class} : Loc: #{Dir.pwd}" if zzmodf != modf
+    # @log.warn "Error 2670 (#{zzmodf}) != (#{modf}) gmra in #{moda} #{zzmodf.class}, #{modf.class} : Loc: #{Dir.pwd}" if zzmodf != modf
 
     raise "2784: #{modf}" if modf && !File.exist?(modf)
 
     insert_into_list moda, modf if modf && modf != ''
 
     # get most recently modified file in that directory
-    zzmodm = `zsh -c 'print -rn -- #{moda}*(om[1]M)'`.chomp
+    # zzmodm = `zsh -c 'print -rn -- #{moda}*(om[1]M)'`.chomp
     modm = get_most_recently_modified_file moda
-    zzmodm = nil if zzmodm == ''
-    @log.debug "Error 2678 (gmrmf) #{zzmodm} != #{modm} in #{moda}" if zzmodm != modm
+    # zzmodm = nil if zzmodm == ''
+    # @log.debug "Error 2678 (gmrmf) #{zzmodm} != #{modm} in #{moda}" if zzmodm != modm
     raise "2792: #{modm}" if modm && !File.exist?(modm)
 
     insert_into_list moda, modm if modm && modm != '' && modm != modf
   end
 
   ## get most recently modified dir
-  zzmodm = `zsh -c 'print -rn -- *(/om[1]M)'`
-  zzmodm = nil if zzmodm == ''
+  # zzmodm = `zsh -c 'print -rn -- *(/om[1]M)'`
+  # zzmodm = nil if zzmodm == ''
   modm = get_most_recently_modified_dir
-  @log.debug "Error 2686 rmd #{zzmodm} != #{modm}" if zzmodm != modm
+  # @log.debug "Error 2686 rmd #{zzmodm} != #{modm}" if zzmodm != modm
 
   if modm != moda
 
     # get most recently accessed file in that directory
-    modmf = `zsh -c 'print -rn -- #{modm}*(oa[1]M)'`
+    # modmf = `zsh -c 'print -rn -- #{modm}*(oa[1]M)'`
     modmf = get_most_recently_accessed_file modm
     raise "2806: #{modmf}" if modmf && !File.exist?(modmf)
 
     insert_into_list modm, modmf
 
     # get most recently modified file in that directory
-    modmf11 = `zsh -c 'print -rn -- #{modm}*(om[1]M)'`
+    # modmf11 = `zsh -c 'print -rn -- #{modm}*(om[1]M)'`
     modmf1 = get_most_recently_modified_file modm
     raise "2812: #{modmf1}" if modmf1 && !File.exist?(modmf1)
 
@@ -2957,9 +3043,11 @@ def gfb dir, func
   sorted_files = Dir[dir].sort_by { |f| File.send(func, f) }.reverse
 
   # add slash to directories
-  sorted_files.map do |f|
-    File.directory?(f) ? f + '/' : f
-  end
+  sorted_files = add_slash sorted_files
+  return sorted_files
+  # sorted_files.map do |f|
+  # File.directory?(f) ? f + '/' : f
+  # end
 end
 # set message which will be displayed in status line
 def message mess
