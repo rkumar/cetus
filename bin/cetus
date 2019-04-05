@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-05 11:12
+#  Last update: 2019-04-05 14:59
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -350,7 +350,14 @@ $ls_color = {
 # This hash contains colors for file patterns, updated from LS_COLORS
 $ls_pattern = {}
 # This hash contains colors for file types, updated from LS_COLORS
-$ls_ftype = {}
+# Default values in absence of LS_COLORS
+$ls_ftype = {
+  'directory' =>  BLUE,
+  'link'      =>  "\e[01;36m",
+  'mi'        =>  "\e[01;31;7m",
+  'or'        =>  "\e[40;31;01m",
+  'ex'        =>  "\e[01;32m"
+}
 ## --------------------------------------------- ##
 
 $patt = nil
@@ -893,23 +900,28 @@ def color_for fname
       # if fname.match?(/k/)
       if fname =~ /#{k}/
         # @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
-        @log.debug "#{fname} matched #{k}. color is #{v}"
         return v
       # else
         # @log.debug "#{fname} di not match #{k}. color is #{v[1..-2]}"
       end
     end
   end
+
   # check filetypes
-  # @log.debug "File:#{fname}"
   if File.exist? fname
-  # @log.debug "Filetype:#{File.ftype(fname)}"
-    return $ls_ftype[File.ftype(fname)]
+    # @log.debug "Filetype:#{File.ftype(fname)}"
+
+    return $ls_ftype[File.ftype(fname)] if $ls_ftype.key? File.ftype(fname)
+    return $ls_ftype['ex'] if File.executable?(fname)
   else
-    # orphan file
-    return $ls_ftype['or'] if File.symlink?(fname)
+    # orphan file, but fff uses mi
+    return $ls_ftype['mi'] if File.symlink?(fname)
+
     @log.warn "FILE WRONG: #{fname}"
+    return $ls_ftype['or']
+
   end
+
   nil
 end
 
@@ -928,7 +940,7 @@ def parse_ls_colors
     if e.start_with? '*.'
       # extension, avoid '*' and use the rest as key
       $ls_color[patt[1..-1]] = colr
-      @log.debug "COLOR: Writing extension (#{patt})."
+      # @log.debug "COLOR: Writing extension (#{patt})."
     elsif e[0] == '*'
       # file pattern, this would be a glob pattern not regex
       # only for files not directories
@@ -940,7 +952,7 @@ def parse_ls_colors
       patt = "^#{patt}" if patt[0] != '.'
       patt = "#{patt}$" if patt[-1] != '*'
       $ls_pattern[patt] = colr
-      @log.debug "COLOR: Writing file (#{patt})."
+      # @log.debug "COLOR: Writing file (#{patt})."
     elsif patt.length == 2
       # file type, needs to be mapped to what ruby will return
       # file, directory di, characterSpecial cd, blockSpecial bd, fifo pi, link ln, socket so, or unknown
@@ -970,7 +982,7 @@ def parse_ls_colors
       else
         $ls_ftype[patt] = colr
       end
-      @log.debug "COLOR: ftype #{patt}"
+      # @log.debug "COLOR: ftype #{patt}"
     end
   end
 end
@@ -2830,7 +2842,7 @@ def enhance_file_list
 
       # TODO: use ruby this throws errors if not files
       if f && !f.empty?
-        @log.debug "CONCAT: #{f}" if @debug_flag
+        # @log.debug "CONCAT: #{f}" if @debug_flag
         $files.concat f
         $files.concat get_important_files(d)
         return
@@ -2948,15 +2960,6 @@ end
 
 # insert important files to end of $files
 def insert_into_list _dir, file
-  if @debug_flag
-    @log.debug 'INSERT: ' + file.class.to_s
-    @log.debug 'INSERT: ' + file.to_s
-  end
-  if file.class.to_s == 'String'
-    if !File.exist?(file)
-      raise "WRONGFILE: #{file}"
-    end
-  end
   # ix = $files.index(dir)
   # raise "something wrong can find #{dir}." unless ix
   # $files.insert ix, *file
