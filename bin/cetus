@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-06 10:15
+#  Last update: 2019-04-06 14:52
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -39,7 +39,7 @@ require 'logger'
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.32.0'.freeze
+VERSION = '0.1.32.1'.freeze
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml".freeze
 
@@ -280,6 +280,7 @@ ensure
 end
 
 ## GLOBALS
+# hints or shortcuts to get to files without moving
 $IDX = ('a'..'y').to_a
 $IDX.delete 'q'
 $IDX.concat ('za'..'zz').to_a
@@ -645,9 +646,10 @@ end
 def redraw_required(flag=true) $redraw_required = flag; end
 
 def resolve_key key
+  ret = true
   if key.match?(/^[a-pr-zZ]$/)
     # hint mode
-    select_hint $viewport, key
+    ret = select_hint $viewport, key
   elsif key == 'BACKSPACE'
     # do we really need this TODO
     $patt = $patt[0..-2] if $patt && !$patt.empty?
@@ -655,6 +657,7 @@ def resolve_key key
   else
     resolve_binding key
   end
+  ret
 end
 
 def resolve_binding key
@@ -813,7 +816,6 @@ def format_array(ary)
   ix = 0
   ctr = 0
   ary.each do |f|
-    # raise "#{f} != #{ary[ix]}" if f != ary[ix]
     ## ctr refers to the index in the column
     ind = get_shortcut(ix)
     mark = SPACE
@@ -971,10 +973,10 @@ def select_hint view, key
   # if x or z take a key IF there are those many
   #
   ix = get_index(key, view.size)
-  return unless ix
+  return nil unless ix
 
   f = view[ix]
-  return unless f
+  return nil unless f
 
   $cursor = $sta + ix
 
@@ -985,6 +987,7 @@ def select_hint view, key
   else
     open_file f
   end
+  true
 end
 
 ## toggle selection state of file
@@ -2011,15 +2014,25 @@ def pause text=' Press a key.'
   get_char
 end
 
-## return shortcut for an index (offset in file array)
-# use 2 more arrays to make this faster
-#  if z or Z take another key if there are those many in view
-#  Also, display ROWS * COLS so now we are not limited to 60.
-def get_shortcut(ix)
-  return '<' if ix < $stact
+## return shortcut/hint for an index (offset in file array)
+# ix is the index of a file in the complete array (view)
+def get_shortcut index
 
-  ix -= $stact
-  i = $IDX[ix]
+  # Case where user has panned to the right columns:
+  # Earlier, we showed '<' in left columns, if user has panned right.
+  # Now we show unused shortcuts after exhausting them.
+  # return '<' if index < $stact
+  if index < $stact
+    index = $viewport.size - $stact + index
+    i = $IDX[index]
+    return i if i
+
+    return '['
+  end
+
+  # Normal case (user has not panned columns)
+  index -= $stact
+  i = $IDX[index]
   return i if i
 
   '->'
@@ -2030,18 +2043,44 @@ end
 #  should we even ask for a second key if there are not enough rows
 #  What if we want to also trap z with numbers for other purposes
 def get_index(key, vsz = 999)
-  i = $IDX.index(key)
-  return i + $stact if i
+  # @log.debug "Etners get_index with #{key}"
+  i = convert_key_to_index key
+  return i if i
 
-  # sz = $IDX.size
-  zch = nil
   if vsz > 25
     if key == 'z' || key == 'Z'
+      last_line
       print key
       zch = get_char
       print zch
-      i = $IDX.index("#{key}#{zch}")
-      return i + $stact if i
+      i = convert_key_to_index("#{key}#{zch}")
+      @log.debug "convert returned #{i} for #{key}#{zch}"
+      return i if i
+      # i = $IDX.index
+      # return i + $stact if i
+    end
+  end
+  nil
+end
+
+# convert pressed key to an index in viewport.
+# Earlier this was simple, but now that we put hints/shortcuts
+#  in rows on the left after panning, we need to account for cycled hints.
+def convert_key_to_index key
+  i = $IDX.index(key)
+  if i
+    @log.debug "get_index with #{key}: #{i}. #{$stact}. #{$viewport.size}"
+    vps = $viewport.size
+    return nil if $stact == 0 && i + $stact >= vps
+    # return nil if $stact > 0 && i + $stact >= vps && i + $stact - vps >= $stact
+    return nil if $stact > 0 && i + $stact >= vps && i - vps >= 0
+
+    if i + $stact >= vps
+      # panning case, hints are recycled
+      return (i + $stact) - vps
+    else
+      # regular hint
+      return i + $stact #if i
     end
   end
   nil
@@ -3085,7 +3124,13 @@ def run
   loop do
 
     key = get_char
-    resolve_key key
+
+    unless resolve_key key # key did not map to file name, so don't redraw
+      place_cursor
+      next
+    end
+
+    # only movement has happened within this page, don't redraw
     if $movement && $old_cursor
       clear_status_line
       print_debug_info if @debug_flag
@@ -3094,6 +3139,7 @@ def run
       $movement = false
       next
     end
+
     redraw rescan?
     place_cursor
 
