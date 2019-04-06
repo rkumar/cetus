@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-06 08:51
+#  Last update: 2019-04-06 10:15
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -308,6 +308,7 @@ $pager_command = {
 }
 $dir_position = {}
 $movement = $old_cursor = nil  # cursor movement has happened only, don't repaint
+$selection_mode = 1 # single select
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -521,7 +522,6 @@ def status_line
     # prompt
     v_mm = $mode ? "[#{$mode}] " : ''
     cf = current_file
-    $message = "No file highlighted (#{cf})" if cf and !$highlighted_a_column
     $message = ' | No matches. Press ESCAPE' if $patt && !cf
 
     clear_status_line
@@ -715,9 +715,6 @@ def columnate ary, siz
   buff = []
   return buff if ary.nil? || ary.empty?
 
-  # 2019-03-19 - just to make sure highlighted column is visible - remove
-  $highlighted_a_column = false
-
   # determine width based on number of files to show
   # if less than sz then 1 col and full width
   #
@@ -733,10 +730,6 @@ def columnate ary, siz
 
       f = ary[ix]
       # f is not just filename but marker and hint
-      # Check last char to see if directory
-      linecolor = nil
-      # FIXME: even this should be done by color_for
-      linecolor = BLUE if f[-1] == '/'
 
       # check to see if we need to truncate
       # 2019-03-18 - truncate from middle of string.
@@ -747,25 +740,9 @@ def columnate ary, siz
         # take the excess out from the center on both sides
         f = truncate_formatted_filename(f, unformatted_len, wid)
 
-        if ix + $sta == $cursor
-          # 2019-03-29 - no longer displaying cursor here since we don't always Callyy
-          # f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
-          $highlighted_a_column = true
-        elsif linecolor
-          f = "#{linecolor}#{f}#{CLEAR}"
-        end
 
       else
 
-        ## we do the coloring before padding so the entire line does not get
-        # padded, only file name
-        if ix + $sta == $cursor
-          # 2019-03-29 - no longer displaying cursor here since we don't always Callyy
-          # f = "#{CURSOR_COLOR}#{f}#{CLEAR}"
-          $highlighted_a_column = true
-        elsif linecolor
-          f = "#{linecolor}#{f}#{CLEAR}"
-        end
         # f = f.ljust(wid)
         f << ' ' * (wid - unformatted_len)
 
@@ -846,7 +823,9 @@ def format_array(ary)
     # NOTE seems like f and ary[ix] are the same
     mark = GMARK if selected?(ary[ix])
 
-    color = color_for f
+    # take care of shortcuts in visited files and dirs
+    fullname = f[0] == '~' ? File.expand_path(f) : f
+    color = color_for fullname
 
     if $long_listing
       begin
@@ -895,7 +874,6 @@ def color_for fname
   return color if color
 
   # check file against patterns
-  # NOTE: this could be slow
   if File.file?(fname)
     $ls_pattern.each_pair do |k, v|
       # if fname.match?(/k/)
@@ -909,7 +887,6 @@ def color_for fname
   end
 
   # check filetypes
-  # shortened file names with ~ fail this check XXX FIXME
   if File.exist? fname
     # @log.debug "Filetype:#{File.ftype(fname)}"
 
@@ -921,7 +898,6 @@ def color_for fname
 
     @log.warn "FILE WRONG: #{fname}"
     return $ls_ftype['or']
-
   end
 
   nil
@@ -1012,14 +988,14 @@ def select_hint view, key
 end
 
 ## toggle selection state of file
-def toggle_select(f=current_file)
-  # dir = Dir.pwd
-  # file = File.join(dir, f)
+def toggle_select f=current_file
   if selected? f
     remove_from_selection f
   else
+    $selected_files.clear if $selection_mode == 1
     add_to_selection f
   end
+  message "#{$selected_files.count} files selected.   "
   # XXX is it possible to just redraw this line
   redraw_required
 end
@@ -1035,10 +1011,9 @@ def open_file(f)
     last = f[-1]
     f = f.chop if last == ' ' || last == '@' || last == '*'
   end
-  nextpos = nil
 
   # could be a bookmark with position attached to it
-  f, nextpos = f.split(':') if f.index(':')
+  f, _nextpos = f.split(':') if f.index(':')
   if File.directory? f
     save_dir_pos
     change_dir f #, nextpos
@@ -1253,12 +1228,14 @@ end
 #
 def toggle_selection_mode
   if $mode == 'SEL'
+    $selection_mode = 1
     unselect_all
     $mode = nil
+    message 'Selection mode is single.   '
   else
-    # $selection_mode = !$selection_mode
+    $selection_mode = 2
     $mode = 'SEL'
-    message 'Typing a hint selects the file. Toggling again will clear selection.'
+    message 'Typing a hint selects the file. Toggling again will clear selection.  '
   end
 end
 
@@ -2566,7 +2543,6 @@ def visited?(file)
   return $visited_files.index file
 end
 
-# TODO: can be array
 def add_to_selection(file)
   ff = file
   case file
@@ -2580,7 +2556,6 @@ def add_to_selection(file)
   end
 end
 
-# TODO: can be array
 def remove_from_selection(file)
   ff = file
   case file
