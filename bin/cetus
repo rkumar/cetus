@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-07 10:35
+#  Last update: 2019-04-07 10:49
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -310,6 +310,7 @@ $pager_command = {
 $dir_position = {}
 $movement = $old_cursor = nil  # cursor movement has happened only, don't repaint
 $selection_mode = 1 # single select
+@group_dirs = true
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -398,7 +399,7 @@ def read_directory
   $filterstr ||= 'M'
   # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   $files = list_files
-  $files = group_directories_first $files
+  $files = group_directories_first($files) if @group_dirs
   return unless $enhanced_mode
 
   enhance_file_list
@@ -445,7 +446,7 @@ def list_files dir='*', sorto=$sorto, hidden=$hidden, filter=$filterstr
       if File.exist? f
         File.send(func, f)
       else
-        sys_stat(f, func)
+        sys_stat(func, f)
       end
     end
   end
@@ -462,12 +463,12 @@ end
 # ------------- end of read_directory --------------------------------#
 
 # this is to deal with dead links.
-def sys_stat file, func
+def sys_stat func, file
   return unless File.symlink? file
 
-  return File.extname(file) if func == :extname
+  # lstat does not respond to path and extname
+  return File.send(func, file) unless File.lstat(file).respond_to? func
 
-  # crashes when called with extname since lstat does not have
   return File.lstat(file).send(func)
 end
 
@@ -1493,14 +1494,16 @@ def menu title, h
 end
 
 def toggle_menu
-  h = { :h => :toggle_hidden,
-        :c => :toggle_case,
-        :l => :toggle_long_list,
+  h = { h: :toggle_hidden,
+        c: :toggle_case,
+        l: :toggle_long_list,
         '1' => :toggle_columns,
+        d: :toggle_group_dirs,
         :p => :toggle_pager_mode,
-        :d => :toggle_debug_flag,
+        :D => :toggle_debug_flag,
         :m => :toggle_selection_mode,
-        :e => :toggle_enhanced_list }
+        :e => :toggle_enhanced_list
+  }
 
   _, menu_text = menu 'Toggle Menu', h
   return unless menu_text
@@ -1515,10 +1518,12 @@ def toggle_menu
     message "Show hidden is now #{!$hidden.nil?}"
     rescan_required
   when :toggle_case
-    # $ignorecase = $ignorecase ? "" : "i"
     $ignorecase = !$ignorecase
-    # pause "Ignore Case is now #{$ignorecase}. Press a key."
     message "Ignore Case is now #{$ignorecase}"
+    rescan_required
+  when :toggle_group_dirs
+    @group_dirs = !@group_dirs
+    message "Group Dirs First is now #{@group_dirs}"
     rescan_required
   when :toggle_columns
     if $gviscols == 1
