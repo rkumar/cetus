@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-07 10:49
+#  Last update: 2019-04-07 13:02
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -462,7 +462,7 @@ def list_files dir='*', sorto=$sorto, hidden=$hidden, filter=$filterstr
 end
 # ------------- end of read_directory --------------------------------#
 
-# this is to deal with dead links.
+# Deal with dead links.
 def sys_stat func, file
   return unless File.symlink? file
 
@@ -3100,7 +3100,8 @@ def clear_status_line
   # print a colored line at bottom of screen
   # \e[33;41m  - set color of status_line
   # %*s        - set blank spaces for entire line
-  print "\e[33;4%sm%*s" % [$status_color || '1', $gcols, " "]
+  # \e[m       - reset text mode
+  print "\e[33;4%sm%*s\e[m" % [$status_color || '1', $gcols, " "]
 end
 
 def print_on_right text
