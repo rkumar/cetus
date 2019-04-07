@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-06 14:52
+#  Last update: 2019-04-07 10:35
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -398,7 +398,7 @@ def read_directory
   $filterstr ||= 'M'
   # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
   $files = list_files
-  $files = sort_file_list $files
+  $files = group_directories_first $files
   return unless $enhanced_mode
 
   enhance_file_list
@@ -427,6 +427,8 @@ def list_files dir='*', sorto=$sorto, hidden=$hidden, filter=$filterstr
            :size
          when 'n'
            :path
+         when 'x'
+           :extname
          end
 
   # sort by time and then reverse so latest first.
@@ -459,11 +461,13 @@ def list_files dir='*', sorto=$sorto, hidden=$hidden, filter=$filterstr
 end
 # ------------- end of read_directory --------------------------------#
 
-# this is just a tempo method to deal with dead links.
-# I should be doing a system stat and parsing that
+# this is to deal with dead links.
 def sys_stat file, func
   return unless File.symlink? file
 
+  return File.extname(file) if func == :extname
+
+  # crashes when called with extname since lstat does not have
   return File.lstat(file).send(func)
 end
 
@@ -1171,7 +1175,7 @@ def refresh
 end
 
 # put directories first, then files
-def sort_file_list files
+def group_directories_first files
   dirs = files.select { |f| File.directory?(f) }
   # earlier I had File? which removed links, esp dead ones
   fi   = files.select { |f| !File.directory?(f) }
@@ -1569,7 +1573,10 @@ def sort_menu
   # ruby mtime/atime/ctime come reversed so we have to change o to O
   lo = nil
   h = { m: :modified, a: :accessed, M: :oldest,
-        l: :largest, s: :smallest, n: :name, r: :rev_name, d: :dirs, c: :inode,
+        s: :largest, S: :smallest, n: :name, N: :rev_name,
+        # d: :dirs,
+        c: :inode,
+        x: :extension,
         z: :clear }
   _, menu_text = menu 'Sort Menu', h
   case menu_text
@@ -1587,6 +1594,8 @@ def sort_menu
     lo = 'oL'
   when :name
     lo = 'on'
+  when :extension
+    lo = 'ox'
   when :rev_name
     lo = 'On'
   when :dirs
