@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-07 15:11
+#  Last update: 2019-04-08 14:40
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -48,7 +48,7 @@ $bindings = {
   '`' => 'main_menu',
   '=' => 'toggle_menu',
   'M-s' => 'selection_menu',
-  'M-o' => 'sort_menu',
+  'M-o' => 'order_menu',
   'ENTER' => 'select_current',
   'C-p' => 'page_current',
   'C-e' => 'edit_current',
@@ -56,7 +56,7 @@ $bindings = {
   'C-s' => 'toggle_select',
   'C-r' => 'reduce',
   'C-g' => 'debug_vars',
-  '@' => 'toggle_selection_mode',
+  '*' => 'toggle_selection_mode',
   'M-a' => 'select_all',
   'M-A' => 'unselect_all',
   '!' => 'execute',
@@ -99,6 +99,8 @@ $bindings = {
   'UP' => 'cursor_up',
   'DOWN' => 'cursor_dn',
   'C-SPACE' => 'visual_mode_toggle',
+  '@' => 'scripts',
+  '#' => 'generators',
 
   '?' => 'print_help',
   'F1' => 'print_help',
@@ -1243,7 +1245,7 @@ def toggle_selection_mode
   else
     $selection_mode = 2
     $mode = 'SEL'
-    message 'Typing a hint selects the file. Toggling again will clear selection.  '
+    message 'Typing a hint selects the file. Typing again will clear   .  '
   end
 end
 
@@ -1424,7 +1426,6 @@ def main_menu
     :a => :ag,
     '/' => :ffind,
     :l => :locate,
-    :V => :viminfo,
     :v => :vidir,
     :z => :z_interface,
     :d => :child_dirs,
@@ -1433,15 +1434,11 @@ def main_menu
     '2' => :select_from_used_dirs,
     :t => :dirtree,
     '4' => :tree,
-    :o => :sort_menu,
+    :o => :order_menu,
     :F => :filter_menu,
-    :c => :command_menu,
+    :c => :create_menu,
     :b => :bookmark_menu,
     :s => :selection_menu,
-    :B => :bindkey_ext_command,
-    :M => :create_a_dir,
-    '%' => :create_a_file,
-    'S' => :scripts,
     :x => :extras
   }
   menu 'Main Menu', h
@@ -1452,7 +1449,7 @@ def selection_menu
     :a => :select_all,
     :u => :unselect_all,
     :s => :toggle_select,
-    '@' => 'toggle_selection_mode',
+    '*' => 'toggle_selection_mode',
     'x' => 'visual_mode_toggle',
     :v => :view_selected_files
   }
@@ -1511,7 +1508,8 @@ def toggle_menu
         d: :toggle_group_dirs,
         :p => :toggle_pager_mode,
         :D => :toggle_debug_flag,
-        :m => :toggle_selection_mode,
+        '8' => :toggle_selection_mode,
+        '*' => :toggle_selection_mode,
         v: :visual_mode_toggle,
         :e => :toggle_enhanced_list
   }
@@ -1584,7 +1582,7 @@ def toggle_menu
   end
 end
 
-def sort_menu
+def order_menu
   # zsh o = order, O = reverse order
   # ruby mtime/atime/ctime come reversed so we have to change o to O
   lo = nil
@@ -1625,8 +1623,17 @@ def sort_menu
   rescan_required
 end
 
+def create_menu
+  h = { f: :create_a_file,
+        d: :create_a_dir,
+        b: :create_bookmark
+  }
+  _, menu_text = menu 'Create Menu', h
+end
+
 # thse need to be placed in correct position, some do nothing
 #  and some like ffind have no menu item
+# TODO FIXME uncalled now. look into this
 def command_menu
   #  since these involve full paths, we need more space, like only one column
   ## in these cases, getting back to the earlier dir, back to earlier listing
@@ -1677,7 +1684,15 @@ end
 
 # This is quite badly placed and named. Maybe these should go elsewhere
 def extras
-  h = { '1' => :one_column, '2' => :multi_column, :c => :columns, :r => :config_read, :w => :config_write }
+  h = { '1' => :one_column,
+        '2' => :multi_column,
+        :c => :columns,
+        s: :scripts,
+        g: :generators,
+        :B => :bindkey_ext_command,
+        :r => :config_read,
+        :w => :config_write
+  }
   key, menu_text = menu 'Extras Menu', h
   case menu_text
   when :one_column
@@ -1955,7 +1970,6 @@ def child_dirs
   $title = 'Directories in current directory'
   # M is MARK_DIRS option for putting trailing slash after dir
   # $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
-  # $files = Dir.glob("*", File::FNM_DOTMATCH).select {|f| File.directory?(f)} - %w[ . ..]
   $files = dirs
   message "#{$files.size} directories."
   # redraw
@@ -2491,26 +2505,13 @@ def locate
   # redraw
 end
 
-## Displays files from .viminfo file, if you use some other editor which
-# tracks files opened then you can modify this accordingly.
-# Neovim does not use viminfo
-#
-def viminfo
-  file = File.expand_path('~/.viminfo')
-  return unless File.exist? file
-  $title = 'Files from ~/.viminfo'
-  # $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- | sed "s#~#$HOME#g"`.split("\n")
-  $files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- `.split("\n")
-  $files.select! { |x| x = File.expand_path(x); File.exist?(x) }
-  # redraw
-end
-
 ##  takes directories from the z program, if you use autojump you can
 #   modify this accordingly
 #
 def z_interface
   file = File.expand_path('~/.z')
   return unless File.exist? file
+
   $title = 'Directories from ~/.z'
   $files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
   home = ENV['HOME']
@@ -2526,7 +2527,9 @@ def vidir
   setup_terminal
 end
 
-## some cursor movement functions
+# ------------- movement related methods --------------------------------#
+
+## scroll cursor down
 def cursor_scroll_dn
   moveto(pos + MSCROLL)
 end
@@ -2535,6 +2538,7 @@ def cursor_scroll_up
   moveto(pos - MSCROLL)
 end
 
+# move cursor down a line
 def cursor_dn
   $movement = true
   $old_cursor = $cursor
@@ -2547,6 +2551,7 @@ def cursor_up
   moveto(pos - 1)
 end
 
+# return cursor position
 def pos
   $cursor
 end
@@ -2594,13 +2599,7 @@ def moveto(position)
 # ensure
   # redraw
 end
-
-# is given file in selected array
-def selected?(file)
-  $current_dir ||= Dir.pwd
-  file = File.join($current_dir, file)
-  return $selected_files.index file
-end
+# --
 
 # is given file in selected array
 def visited?(file)
@@ -2609,6 +2608,16 @@ def visited?(file)
   return $visited_files.index file
 end
 
+# ------------- selection related methods --------------------------------#
+
+# is given file in selected array
+def selected?(file)
+  $current_dir ||= Dir.pwd
+  file = File.join($current_dir, file)
+  return $selected_files.index file
+end
+
+# add given file/s to selected file list
 def add_to_selection(file)
   ff = file
   case file
@@ -2635,6 +2644,7 @@ def remove_from_selection(file)
   end
 end
 
+# ------------- visual mode methods --------------------------------#
 def visual_mode_toggle
   $mode = nil
   $visual_mode = !$visual_mode
@@ -2656,6 +2666,7 @@ def visual_block_clear
   $visual_mode = nil
 end
 
+# ------------- file matching methods --------------------------------#
 def file_starting_with(first_char)
   ix = return_next_match(method(:file_matching?), "^#{first_char}")
   goto_line ix if ix
@@ -2686,13 +2697,14 @@ end
 ##
 # position cursor on a specific line which could be on a nother page
 # therefore calculate the correct start offset of the display also.
-def goto_line(pos)
+def goto_line pos
   pages = ((pos * 1.00) / $pagesize).ceil
   pages -= 1
   $sta = pages * $pagesize + 1
   $cursor = pos
 end
 
+# ---
 def filetype(f)
   return nil unless f
 
@@ -2735,9 +2747,7 @@ def revert_dir_pos
 end
 
 def create_a_dir
-  print
-  print 'Enter directory name: '
-  str = readline
+  str = readline 'Enter directory name: '
   return if str == ''
 
   if File.exist? str
@@ -2754,9 +2764,7 @@ def create_a_dir
 end
 
 def create_a_file
-  print
-  print 'Enter file name: '
-  str = readline
+  str = readline 'Enter file name: '
   return if str.nil? || str == ''
 
   system %($EDITOR "#{str}")
@@ -2777,47 +2785,84 @@ def current_or_selected_files
 end
 
 # ------------------- scripts ------------------ #
-# prompt for scripts to execute, giving selected file names
-# NOTE: TODO 2019-03-21 - some scripts can output a filelist to display
+# prompt for scripts to execute, giving file name under cursor
 def scripts
-  write_selected_files
   # some scripts may work with the selected_files and not want to be called
   #  with filenames.
+  write_selected_files
+
   title = 'Select a script'
   script_path = '~/.config/cetus/scripts'
-  # TODO write selected files to a known file before calling
-  binding = `find #{script_path} -type f | fzf --prompt="#{title.to_s} :"`
-  return unless binding
+  binding = `find #{script_path} -type f | fzf --prompt="#{title} :"`.chomp
+  return if binding.nil? || binding == ''
 
-  binding = binding.chomp if binding
   # TODO: check if binding is a file and executable
   # xargs only seems to take the first file
   # cf = current_or_selected_files.join('\0')
   # cf = Shellwords.join(current_or_selected_files)
-  current_or_selected_files.each do |file|
-    system %( #{binding} "#{file}" )
-  end
+  # This was getting called repeatedly even if script used selected_files
+  # current_or_selected_files.each do |file|
+    # system %( #{binding} "#{file}" )
+  # end
+
+  # 2019-04-08 - to avoid confusion, we pass name of file under cursor
+  # script may ignore this and use selected_files
+  system %( #{binding} "#{current_file}" )
+
   # system %(echo "#{cf}" | xargs #{binding})
   pause
+  redraw_required
+end
+
+# allow user to select a script that generates filenames which
+#  will be displayed for selection or action.
+def generators
+  write_selected_files
+
+  title = 'Select a generator'
+  script_path = '~/.config/cetus/generators'
+  binding = `find #{script_path} -type f | fzf --prompt="#{title} :"`.chomp
+  return if binding.nil? || binding == ''
+
+  # call generator and accept list of files
+  $title = "Files from #{File.basename(binding)}"
+  $files = `#{binding} "#{current_file}"`.split("\n")
+
 end
 # ------------- end of scripts --------------------------------#
 
 # ------------------- view_selected_files ------------------ #
 def view_selected_files
   fname = write_selected_files
+
+  unless fname
+    message "No file selected.    "
+    return
+  end
+
   system "$PAGER #{fname}"
   setup_terminal
 end
 # ------------- end of view_selected_files --------------------------------#
 
 # write selected files to a file and return path
+# if no selected files then blank out the file, or else
+# script could use old selection again.
 def write_selected_files
+
   fname = File.join(File.dirname(CONFIG_FILE), 'selected_files')
   fname = File.expand_path(fname)
+
+  # remove file if no selection
+  unless $selected_files
+    File.unlink(fname)
+    return nil
+  end
 
   File.open(fname, 'w') do |file|
     $selected_files.each { |row| file.puts row }
   end
+
   return fname
 end
 ##
@@ -3098,7 +3143,9 @@ def gfb dir, func
   # File.directory?(f) ? f + '/' : f
   # end
 end
+
 # set message which will be displayed in status line
+# TODO: maybe we should pad it 2019-04-08 -
 def message mess
   $message = mess
 end
