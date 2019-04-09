@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-08 14:40
+#  Last update: 2019-04-08 19:33
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -39,7 +39,7 @@ require 'logger'
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.32.1'.freeze
+VERSION = '0.1.33.0'.freeze
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml".freeze
 
@@ -211,7 +211,8 @@ end
 
 # wrap readline so C-c can be ignored, but blank is taken as default
 def readline prompt='>'
-  last_line
+  clear_last_line
+  print "\r"
   # do we need to clear till end of line, see enter_regex commented
   # unhide cursor
   print "\e[?25h"
@@ -532,7 +533,7 @@ def status_line
     cf = current_file
     $message = ' | No matches. Press ESCAPE' if $patt && !cf
 
-    clear_status_line
+    clear_last_line
 
     # Print the filename at the right side of the status_line
     # sometimes due to search, there is no file
@@ -545,7 +546,10 @@ def status_line
       end
     end
     # move to beginning of line, reset text mode after printing
-    print "\r#{v_mm}#{$patt}#{$message}\e[m"
+    # patt and message are together, no gap, why not ? 2019-04-08 -
+    patt = "[/#{$patt}]" if $patt
+    patt[-1] = '/i]' if $patt && $ignorecase
+    print "\r#{v_mm}#{patt}#{$message}\e[m"
 
 end
 
@@ -1103,16 +1107,14 @@ def run_command(f)
   when String
     files = Shellwords.escape(f)
   end
-  print "Run a command on #{files}: "
   begin
     # Readline::HISTORY.push(*values)
-    command = readline
+    command = readline "Run a command on #{files}: "
     # command = gets().chomp
     return if command.empty?
 
-    print 'Second part of command: '
     # command2 = gets().chomp
-    command2 = readline
+    command2 = readline 'Second part of command: '
     puts "#{command} #{files} #{command2}"
     system "#{command} #{files} #{command2}"
     setup_terminal
@@ -1205,7 +1207,7 @@ def goto_dir
     # path = gets.chomp
     path = readline 'Enter path to go to: '
     if path.nil? || path == ''
-      clear_status_line
+      clear_last_line
       return
     end
     # rescue => ex
@@ -1556,7 +1558,7 @@ def toggle_menu
     message "Default command is #{$default_command}"
   when :toggle_enhanced_list
     $enhanced_mode = !$enhanced_mode
-    message "Enhanced mode is #{$long_listing}"
+    message "Enhanced mode is #{$enhanced_mode}"
     rescan_required
 
   when :toggle_long_list
@@ -2041,7 +2043,7 @@ end
 # This is supposed to print on the status line
 # but prints on next line.FIXME 2019-03-24 - 00:08
 def perror text
-  clear_status_line
+  clear_last_line
   last_line
   print "#{RED}#{text}. Press a key.#{CLEAR}"
   get_char
@@ -2274,7 +2276,7 @@ def file_actions(action = nil)
     view_selected_files if key == '?'
     return if key != 'y'
 
-    clear_status_line
+    clear_last_line
     print "\r deleting ..."
     system "#{delcommand} #{files}"
     refresh
@@ -3156,7 +3158,7 @@ def last_line
   tput_cup $glines, 0
 end
 
-def clear_status_line
+def clear_last_line
   last_line
   # print a colored line at bottom of screen
   # \e[33;41m  - set color of status_line
@@ -3208,7 +3210,7 @@ def run
 
     # only movement has happened within this page, don't redraw
     if $movement && $old_cursor
-      clear_status_line
+      clear_last_line
       print_debug_info if @debug_flag
       # we may want to print debug info if flag is on
       place_cursor
