@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-09 12:46
+#  Last update: 2019-04-10 00:12
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -315,7 +315,7 @@ $movement = $old_cursor = nil  # cursor movement has happened only, don't repain
 $selection_mode = 1 # single select
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
-@truncate_from = :right
+@truncate_from = :left
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -564,7 +564,7 @@ def status_line
 end
 
 def print_debug_info cf=current_file()
-  print_on_right "= #{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
+  print_on_right "len:#{cf.length}/#{$temp_wid} = #{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
 end
 
 # should we do a read of the dir
@@ -762,6 +762,7 @@ def columnate ary, siz
   # if less than sz then 1 col and full width
   #
   wid = get_width ary.size, siz
+  $temp_wid = wid
 
   # ix refers to the index in the complete file list, wherease we only show 60 at a time
   ix = 0
@@ -784,7 +785,7 @@ def columnate ary, siz
         f = truncate_formatted_filename(f, unformatted_len, wid)
 
 
-      else
+      elsif unformatted_len < wid
 
         # f = f.ljust(wid)
         f << ' ' * (wid - unformatted_len)
@@ -816,8 +817,39 @@ def truncate_formatted_filename f, unformatted_len, wid
   point = center + excess_half
   point1 = point - excess
   # the space comes after the ANSI formatting
-  f = f[0..(point1 - 1)] + '$' + f[point + 2 .. -1] + ' '
-  f
+  f = case @truncate_from
+      when :right
+        if f[0] == "\e"
+          sindex = f.index('m')
+          # eindex = f.rindex "\e"
+        else
+          sindex = 0
+          # eindex = f.length
+        end
+
+        # remove 2 for $ and space
+        f[0..wid + sindex - 2] + "$ \e[m"
+      when :center
+        f[0..(point1 - 1)] + '$' + f[point + 2 .. -1] + ' '
+      when :left
+        # we cannot remove the hint
+        sindex = f.index ' '
+        if f[0] == "\e"
+          mindex = f.index('m')
+          hintsize = sindex - mindex - 1
+        else
+          hintsize = sindex - 1
+        end
+        # for single hints we need to add extra space
+        # TODO there could be escape codes of varying length
+        # f[0..sindex + 1] + '<' + f[-wid + hintsize..-1] + ' '
+        @log.debug "XXX #{excess}: #{f} / #{wid}"
+        f[0..sindex + 1] + '<' + f[sindex + 4 + excess ..-1] + ' '
+        # in some cases 29/32 we are actually overlapping 2 parts above
+        #  same for 34/32
+        # TODO: todo
+      end
+  return f
 end
 
 def get_width arysz, siz
@@ -2131,7 +2163,7 @@ end
 def convert_key_to_index key
   i = $IDX.index(key)
   if i
-    @log.debug "get_index with #{key}: #{i}. #{$stact}. #{$viewport.size}"
+    # @log.debug "get_index with #{key}: #{i}. #{$stact}. #{$viewport.size}"
     vps = $viewport.size
     return nil if $stact == 0 && i + $stact >= vps
     # return nil if $stact > 0 && i + $stact >= vps && i + $stact - vps >= $stact
@@ -3191,9 +3223,17 @@ def clear_last_line
   print "\e[33;4%sm%*s\e[m" % [$status_color || '1', $gcols, " "]
 end
 
+# print right aligned
+# FIXME: if text longer then width then does not print
 def print_on_right text
   sz = text.size
-  system "tput cup #{$glines} #{$gcols - sz - 1}"
+  col = $gcols - sz - 1
+  col = 2 if col < 2
+  if sz > $gcols - 2
+    text = text[0..$gcols-3]
+  end
+  # system "tput cup #{$glines} #{$gcols - sz - 1}"
+  system "tput cup #{$glines} #{col}"
   # tput_cup $glines, $gcols - sz - 1
   # print text
   print "\e[33;4#{$status_color}m#{text}\e[m"
