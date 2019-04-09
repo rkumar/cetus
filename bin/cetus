@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-08 19:33
+#  Last update: 2019-04-09 11:47
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -547,9 +547,17 @@ def status_line
     end
     # move to beginning of line, reset text mode after printing
     # patt and message are together, no gap, why not ? 2019-04-08 -
-    patt = "[/#{$patt}]" if $patt
-    patt[-1] = '/i]' if $patt && $ignorecase
-    print "\r#{v_mm}#{patt}#{$message}\e[m"
+    if $patt && $patt != ''
+      patt = "[/#{$patt}]"
+      patt[-1] = '/i]' if $ignorecase
+    end
+    # bring cursor to start of line
+    # add background color
+    # print mode
+    # print search pattern if any
+    # print message if any
+    # print "\r#{v_mm}#{patt}#{$message}\e[m"
+    print "\r\e[33;4#{$status_color}m#{v_mm}#{patt}#{$message}\e[m"
 
 end
 
@@ -3171,10 +3179,13 @@ def print_on_right text
   sz = text.size
   system "tput cup #{$glines} #{$gcols - sz - 1}"
   # tput_cup $glines, $gcols - sz - 1
-  print text
+  # print text
+  print "\e[33;4#{$status_color}m#{text}\e[m"
 end
 
+# unused, should set bgcolor before printing
 def print_last_line text
+  # unused ??
   last_line
   print text
 end
@@ -3210,8 +3221,10 @@ def run
 
     # only movement has happened within this page, don't redraw
     if $movement && $old_cursor
-      clear_last_line
-      print_debug_info if @debug_flag
+      if @debug_flag
+        clear_last_line # 2019-04-09 - was clearing dir name
+        print_debug_info
+      end
       # we may want to print debug info if flag is on
       place_cursor
       $movement = false
