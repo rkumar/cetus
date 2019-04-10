@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+## Displays files from .viminfo file, if you use some other editor which
+# tracks files opened then you can modify this accordingly.
+# Neovim does not use viminfo
+file = File.expand_path('~/.viminfo')
+return unless File.exist? file
+files = `grep '^>' ~/.viminfo | cut -d ' ' -f 2- `.split("\n")
+files.select! { |x| x = File.expand_path(x); File.exist?(x) }
+files.each { |f| puts f }
