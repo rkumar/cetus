@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-10 00:12
+#  Last update: 2019-04-10 10:16
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -315,7 +315,7 @@ $movement = $old_cursor = nil  # cursor movement has happened only, don't repain
 $selection_mode = 1 # single select
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
-@truncate_from = :left
+@truncate_from = :center
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -810,44 +810,52 @@ end
 
 # shorten the filename to wid
 # unformatted_len is the length without ANSI formatting
+# wid is the exact width every line should restrict itself to.
+# f is filename with hint and space and possible ANSI codes.
+# WARN: check for hint getting swallowed in case of 5 columns
 def truncate_formatted_filename f, unformatted_len, wid
   excess = unformatted_len - wid
-  center = unformatted_len / 2
-  excess_half = excess / 2
-  point = center + excess_half
-  point1 = point - excess
-  # the space comes after the ANSI formatting
-  f = case @truncate_from
-      when :right
-        if f[0] == "\e"
-          sindex = f.index('m')
-          # eindex = f.rindex "\e"
-        else
-          sindex = 0
-          # eindex = f.length
-        end
 
-        # remove 2 for $ and space
+  f = case @truncate_from
+
+      when :right
+        # text starts at 0, or 'm' if escape code
+        sindex = f[0] == "\e" ? f.index('m') : 0
+
+        # We show exactly `wid` characters, but escapes are not displayed
+        # so add that may characters
+        # Also, remove 2 for $ and space
         f[0..wid + sindex - 2] + "$ \e[m"
+
       when :center
-        f[0..(point1 - 1)] + '$' + f[point + 2 .. -1] + ' '
+
+        # from central point calculate how much to remove in both directions
+        center = unformatted_len / 2
+        excess_half = excess / 2
+        point = center + excess_half
+        point1 = point - excess
+
+        # remove text between point1 and point
+        f[0..(point1 - 1)] + '$' + f[point + 2..-1] + ' '
+
       when :left
-        # we cannot remove the hint
-        sindex = f.index ' '
-        if f[0] == "\e"
-          mindex = f.index('m')
-          hintsize = sindex - mindex - 1
-        else
-          hintsize = sindex - 1
-        end
+
+        # NOTE: we cannot remove the hint
         # for single hints we need to add extra space
-        # TODO there could be escape codes of varying length
+        # there could be escape codes of varying length
+        sindex = f.index ' '
+        # if f[0] == "\e"
+          # mindex = f.index('m')
+          # hintsize = sindex - mindex - 1
+        # else
+          # hintsize = sindex - 1
+        # end
         # f[0..sindex + 1] + '<' + f[-wid + hintsize..-1] + ' '
         @log.debug "XXX #{excess}: #{f} / #{wid}"
-        f[0..sindex + 1] + '<' + f[sindex + 4 + excess ..-1] + ' '
+        # 4 = 2 for literals, 2 to get ahead of sindex+1
+        f[0..sindex + 1] + '<' + f[sindex + 4 + excess..-1] + ' '
         # in some cases 29/32 we are actually overlapping 2 parts above
         #  same for 34/32
-        # TODO: todo
       end
   return f
 end
@@ -1566,6 +1574,7 @@ def toggle_menu
         '8' => :toggle_selection_mode,
         '*' => :toggle_selection_mode,
         v: :visual_mode_toggle,
+        t: :toggle_truncate_from,
         :e => :toggle_enhanced_list
   }
 
@@ -1634,7 +1643,21 @@ def toggle_menu
   when :toggle_debug_flag
     @debug_flag = !@debug_flag
     message "Debug flag is #{@debug_flag}"
+
+  when :toggle_truncate_from
+    # if filename exceeds width cut from which direction
+    @truncate_from = case @truncate_from
+                     when :center
+                       :left
+                     when :left
+                       :right
+                     when :right
+                       :center
+                     else
+                       :center
+                     end
   end
+  message "Truncate long filenames from: #{@truncate_from}"
 end
 
 def order_menu
@@ -1814,13 +1837,14 @@ def reduce pattern=nil
     pattern = gets.chomp
   end
   $title = "Filter: pattern #{pattern}"
-  $files = $files.select {|f| f.match(pattern)}
+  $files = $files.select { |f| f.match(pattern) }
 end
 
 def filter_for_current_extension
   extn = File.extname(current_file)
   return unless extn
-  reduce extn
+
+  $files = $files.select { |f| !File.directory?(f) && extn == File.extname(f) }
 end
 
 def select_from_used_dirs
