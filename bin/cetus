@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-10 11:18
+#  Last update: 2019-04-10 13:10
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -52,7 +52,7 @@ $bindings = {
   'ENTER' => 'select_current',
   'C-p' => 'page_current',
   'C-e' => 'edit_current',
-  'C-o' => 'edit_current',
+  'C-o' => 'open_current',
   'C-s' => 'toggle_select',
   'C-r' => 'reduce',
   'C-g' => 'debug_vars',
@@ -317,6 +317,7 @@ $selection_mode = 1 # single select
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
 @truncate_from = :center
+@filename_status_line = true
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -568,6 +569,10 @@ def print_debug_info cf=current_file()
   print_on_right "len:#{cf.length}/#{$temp_wid} = #{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
 end
 
+def print_filename_status_line cf=current_file()
+  print_on_right "| #{cf}".rjust(40)
+end
+
 # should we do a read of the dir
 def rescan?
   $rescan_required
@@ -660,6 +665,7 @@ def clear_cursor
   print "#{hint}  "
 end
 
+# place cursor on row and col taking first two rows into account
 def tput_cup row, col
   # we add 3: 2 is for the help and directory line. 1 is since tput is 1 based
   print "\e[#{row + 3};#{col + 1}H"
@@ -1144,13 +1150,21 @@ end
 # regardless of mode, edit the current file using editor
 def edit_current
   command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
+  @log.debug "edit current "
+  run_on_current command
+  $visited_files.insert(0, current_file)
+end
+def open_current
+  @log.debug "open current "
+  command = 'open'
   run_on_current command
   $visited_files.insert(0, current_file)
 end
 
 # run given command on current file
 def run_on_current(command)
-  f = $view[$cursor]
+  f = current_file
+  @log.debug "run on current got #{command} for #{f}"
   return unless f
   f = File.expand_path(f)
   return unless File.readable?(f)
@@ -1457,7 +1471,7 @@ def debug_vars
 end
 
 def view_bookmarks
-  puts
+  clear_last_line
   puts 'Bookmarks: '
   $bookmarks.each_pair { |k, v| puts "#{k.ljust(7)}  =>  #{v}" }
   puts
@@ -1515,7 +1529,7 @@ end
 def menu title, h
   return unless h
 
-  last_line # 2019-03-30 - required since cursor is not longer at bottom
+  clear_last_line # 2019-03-30 - required since cursor is not longer at bottom
   pbold title.to_s
   # h.each_pair { |k, v| puts " #{k}: #{v}" }
   # 2019-03-09 - trying out using `column` to print in cols
@@ -1993,6 +2007,8 @@ def subcommand
     $writing = true if $modified
   elsif command == 'e'
     edit_current
+  elsif command == 'o'
+    open_current
   elsif command == 'h' or command == 'help' or command == '?'
     print_help
   elsif command == 'p'
@@ -2917,7 +2933,9 @@ end
 # script could use old selection again.
 def write_selected_files
 
-  fname = File.join(File.dirname(CONFIG_FILE), 'selected_files')
+  # fname = File.join(File.dirname(CONFIG_FILE), 'selected_files')
+  # 2019-04-10 - changed to ~/tmp otherwise confusion about location
+  fname = File.join('~/tmp/', 'selected_files')
   fname = File.expand_path(fname)
 
   # remove file if no selection
@@ -3234,7 +3252,9 @@ def clear_last_line
 end
 
 # print right aligned
-# FIXME: if text longer then width then does not print
+# XXX does not clear are, if earlier text was longer then that remains.
+# TODO: 2019-04-10 - this should update a variable, and status_line
+# should clear and reprint mode, message, patt and right text
 def print_on_right text
   sz = text.size
   col = $gcols - sz - 1
@@ -3293,6 +3313,8 @@ def run
       if @debug_flag
         clear_last_line
         print_debug_info
+      elsif @filename_status_line
+        print_filename_status_line
       end
 
       place_cursor
