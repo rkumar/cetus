@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-10 10:16
+#  Last update: 2019-04-10 11:12
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -67,6 +67,7 @@ $bindings = {
   '.' => 'pop_dir',
   ':' => 'subcommand',
   "'" => 'goto_bookmark',
+  '"' => 'file_starting_with',
   '/' => 'enter_regex',
   'M-p' => 'prev_page',
   'M-n' => 'next_page',
@@ -704,14 +705,14 @@ end
 # numbers represent quick bookmarks
 # if bookmark exists, go to else create it.
 def resolve_numeric_key key
-    d = $bookmarks[key]
-    if d
-      change_dir d
-      return
-    end
+  d = $bookmarks[key]
+  if d
+    change_dir d
+    return
+  end
 
-    set_bookmark key
-    message "Created bookmark #{key}."
+  set_bookmark key
+  message "Created bookmark #{key}."
 end
 
 def set_bookmark key, dir=Dir.pwd
@@ -1342,38 +1343,20 @@ def goto_home_dir
   change_dir '~'
 end
 
-## This actually filters, in zfm it goes to that entry since we have a cursor there
-#
-def goto_entry_starting_with(fc = nil)
-  unless fc
-    print 'Entries starting with: '
-    fc = get_char
-  end
-  return if fc.size != 1
-
-  ## this is wrong and duplicates the functionality of /
-  #  It shoud go to cursor of item starting with fc
-  $patt = "^#{fc}"
-end
 
 # Goes to directory bookmarked with number or upper case char.
 # If lower case character given, then go to first file starting with char.
-def goto_bookmark(key = nil)
+def goto_bookmark key=nil
   unless key
-    last_line
+    clear_last_line
     print 'Enter bookmark char: '
     key = get_char
   end
-  if key =~ /^[0-9A-Z]$/
-    d = $bookmarks[key]
-    if d
-      change_dir d
-    else
-      perror "#{key} not a bookmark"
-    end
+  d = $bookmarks[key]
+  if d
+    change_dir d
   else
-    # goto_entry_starting_with key
-    file_starting_with key
+    perror "#{key} not a bookmark. "
   end
 end
 
@@ -1480,7 +1463,7 @@ def view_bookmarks
   puts
   print 'Enter bookmark to goto: '
   key = get_char
-  goto_bookmark(key) if key =~ /^[0-9A-Z]$/
+  goto_bookmark(key)
 end
 
 # MENU MAIN
@@ -1575,7 +1558,7 @@ def toggle_menu
         '*' => :toggle_selection_mode,
         v: :visual_mode_toggle,
         t: :toggle_truncate_from,
-        :e => :toggle_enhanced_list
+        e: :toggle_enhanced_list
   }
 
   _, menu_text = menu 'Toggle Menu', h
@@ -1656,8 +1639,8 @@ def toggle_menu
                      else
                        :center
                      end
+    message "Truncate long filenames from: #{@truncate_from}"
   end
-  message "Truncate long filenames from: #{@truncate_from}"
 end
 
 def order_menu
@@ -1954,17 +1937,18 @@ end
 ## accept a character to save this dir as a bookmark
 def create_bookmark
 
-  print 'Enter A to Z or 0-9 to create a bookmark: '
+  clear_last_line
+  print 'Enter A-Z, a-z or 0-9 to create a bookmark: '
   # print "\e[?25h" # unhide cursor
   key = get_char
   # print "\e[?25l" # hide cursor
-  if key =~ /^[0-9A-Z]$/
+  if key =~ /^[0-9A-Za-z]$/
     # $bookmarks[key] = "#{Dir.pwd}:#{$cursor}"
     set_bookmark key
     $modified = true
-    message "Created bookmark #{key}"
+    message "Created bookmark #{key} for #{File.basename(Dir.pwd)}."
   else
-    perror 'Bookmark must be upper-case character or number.'
+    perror 'Bookmark must be alpha character or number.'
   end
   # redraw
 end
@@ -2121,8 +2105,7 @@ end
 # but prints on next line.FIXME 2019-03-24 - 00:08
 def perror text
   clear_last_line
-  last_line
-  print "#{RED}#{text}. Press a key.#{CLEAR}"
+  print "\r#{RED}#{text}. Press a key.#{CLEAR}"
   get_char
 end
 
@@ -2746,10 +2729,12 @@ def visual_block_clear
 end
 
 # ------------- file matching methods --------------------------------#
-# this is a bit silly because it only works with lower case chars, we
-#  cannot get to files starting with numbers or uppercase since it is not
-#  called in those cases !!
-def file_starting_with first_char
+def file_starting_with first_char=nil
+  unless first_char
+    clear_last_line
+    print "\rEnter first char: "
+    first_char = get_char
+  end
   ix = return_next_match(method(:file_matching?), "^#{first_char}")
   goto_line ix if ix
 end
@@ -3244,7 +3229,8 @@ def clear_last_line
   # \e[33;41m  - set color of status_line
   # %*s        - set blank spaces for entire line
   # \e[m       - reset text mode
-  print "\e[33;4%sm%*s\e[m" % [$status_color || '1', $gcols, " "]
+  # \r         - bring to start of line since callers will print.
+  print "\e[33;4%sm%*s\e[m\r" % [$status_color || '1', $gcols, " "]
 end
 
 # print right aligned
