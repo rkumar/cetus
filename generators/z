@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+
+# testing z interface
+
+file = File.expand_path('~/.z')
+return unless File.exist? file
+
+# $title = 'Directories from ~/.z'
+files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
+home = ENV['HOME']
+# shorten file names
+files.collect! do |f|
+  f.sub(/#{home}/, '~')
+end
+files.each { |f| puts f }
