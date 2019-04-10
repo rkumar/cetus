@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-10 13:10
+#  Last update: 2019-04-10 14:48
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -858,7 +858,7 @@ def truncate_formatted_filename f, unformatted_len, wid
           # hintsize = sindex - 1
         # end
         # f[0..sindex + 1] + '<' + f[-wid + hintsize..-1] + ' '
-        @log.debug "XXX #{excess}: #{f} / #{wid}"
+        # @log.debug "XXX #{excess}: #{f} / #{wid}"
         # 4 = 2 for literals, 2 to get ahead of sindex+1
         f[0..sindex + 1] + '<' + f[sindex + 4 + excess..-1] + ' '
         # in some cases 29/32 we are actually overlapping 2 parts above
@@ -1150,21 +1150,19 @@ end
 # regardless of mode, edit the current file using editor
 def edit_current
   command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
-  @log.debug "edit current "
   run_on_current command
   $visited_files.insert(0, current_file)
 end
+
 def open_current
-  @log.debug "open current "
-  command = 'open'
-  run_on_current command
+  opener = /darwin/ =~ RUBY_PLATFORM ? 'open' : 'xdg-open'
+  run_on_current opener
   $visited_files.insert(0, current_file)
 end
 
 # run given command on current file
 def run_on_current(command)
   f = current_file
-  @log.debug "run on current got #{command} for #{f}"
   return unless f
   f = File.expand_path(f)
   return unless File.readable?(f)
@@ -2171,7 +2169,7 @@ def get_index(key, vsz = 999)
       zch = get_char
       print zch
       i = convert_key_to_index("#{key}#{zch}")
-      @log.debug "convert returned #{i} for #{key}#{zch}"
+      # @log.debug "convert returned #{i} for #{key}#{zch}"
       return i if i
       # i = $IDX.index
       # return i + $stact if i
@@ -2474,7 +2472,7 @@ def file_actions(action = nil)
   else
     return unless menu_text
 
-    @log.debug "#{menu_text} #{files}"
+    # @log.debug "#{menu_text} #{files}"
     last_line
     pause "#{menu_text} #{files}"
     system "#{menu_text} #{files}"
