@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-10 14:48
+#  Last update: 2019-04-10 23:25
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -1109,19 +1109,24 @@ def open_file(f)
     change_dir f #, nextpos
   elsif File.readable? f
     # TODO: looks complex pls simplify !! XXX
+    # by default, default command is nil. Changed in toggle_pager_mode
     $default_command ||= '$PAGER'
+    # by default mode, is false, changed in toggle_pager_mode
+    # Get filetype, and check for command for type, else extn else unknown
     if !$editor_mode
       ft = filetype f
-      if ft
-        comm = $pager_command[ft]
-      else
-        comm = $pager_command[File.extname(f)]
-        comm ||= $pager_command['unknown']
-      end
+      comm = $pager_command[ft] if ft
+      comm ||= $pager_command[File.extname(f)]
+      comm ||= $pager_command['unknown']
     else
+      # 2019-04-10 - what does this mean, that in editor_mode, editor
+      # opens everything? what of images etc
+      # TODO use editor only for text, otherwise use filetype or another hash
+      # like editor_command
       comm = $default_command
     end
     comm ||= $default_command
+    # '%%' will be substituted with the filename. See zip
     comm = if comm.index('%%')
              comm.gsub('%%', Shellwords.escape(f))
            else
@@ -1131,6 +1136,7 @@ def open_file(f)
     reset_terminal
     system(comm.to_s)
     setup_terminal
+    # XXX maybe use absolute_path instead of hardcoding
     f = Dir.pwd + '/' + f if f[0] != '/'
     $visited_files.insert(0, f)
     push_used_dirs Dir.pwd
@@ -2472,9 +2478,8 @@ def file_actions(action = nil)
   else
     return unless menu_text
 
-    # @log.debug "#{menu_text} #{files}"
     last_line
-    pause "#{menu_text} #{files}"
+    pause "#{menu_text} #{files} "
     system "#{menu_text} #{files}"
     setup_terminal
     refresh
