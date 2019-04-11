@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-10 23:25
+#  Last update: 2019-04-11 10:21
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -2790,23 +2790,19 @@ def goto_line pos
   $cursor = pos
 end
 
-# ---
-def filetype(f)
+# return filetype of file using `file` external command.
+# NOTE: Should we send back executable as separate type or allow
+#  it to be nil, so it will be paged.
+def filetype f
   return nil unless f
 
   f = Shellwords.escape(f)
   s = `file #{f}`
-  if s.index 'text'
-    return :text
-  elsif s.index(/[Zz]ip/)
-    return :zip
-  elsif s.index('archive')
-    return :zip
-  elsif s.index 'image'
-    return :image
-  elsif s.index 'data'
-    return :text
-  end
+  return :text if s.index 'text'
+  return :zip if s.index(/[Zz]ip/)
+  return :zip if s.index('archive')
+  return :image if s.index 'image'
+  return :text if s.index 'data'
 
   nil
 end
