@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-11 11:29
+#  Last update: 2019-04-11 11:50
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -16,13 +16,8 @@
 # 2019-03-04 - change clear to go to 0,0 and clear down to reduce pollution
 # 2019-03-04 - changed quit to q (earlier Q)
 # 2019-03-04 - first dirs then files
-# 2019-03-10 - changing selected_files to have fullpath
 # 2019-03-22 - refactoring the code, esp run()
 #  == TODO
-#  a method is called from. a menu or direct from key. e.g help
-#  To dirs add GEMHOME RUBYLIB PYTHONILB or PYTHONPATH,
-#  Make rubygem aware : gemspec or Gemfile the expand lib and bin
-#  fpath if existing
 
 require 'readline'
 require 'io/wait'
@@ -39,11 +34,10 @@ require 'logger'
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.34.0'.freeze
+VERSION = '0.1.35.0'.freeze
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml".freeze
 
-# $bindings = {}
 $bindings = {
   '`' => 'main_menu',
   '=' => 'toggle_menu',
