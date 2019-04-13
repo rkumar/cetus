@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-12 23:42
+#  Last update: 2019-04-13 14:07
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -77,7 +77,8 @@ $bindings = {
   'C-i' => 'views',
   # '?' => 'dirtree',
   'D' => 'delete_file',
-  'M' => 'file_actions most',
+  # 'M' => 'file_actions most',
+  'M' => 'move_instant',
   'q' => 'quit_command', # was Q now q 2019-03-04 -
   # "RIGHT"   => "column_next",
   'RIGHT' => 'select_current', # changed 2018-03-12 - for faster navigation
@@ -308,11 +309,14 @@ PAGER_COMMAND = {
 $dir_position = {}
 $movement = $old_cursor = nil  # cursor movement has happened only, don't repaint
 $selection_mode = 1 # single select
+## FLAGS
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
 @truncate_from = :center
 @filename_status_line = true
 @display_file_stats = true
+@selected_files_fullpath_flag = false
+@selected_files_escaped_flag = false
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -977,6 +981,8 @@ end
 
 # determine color for a filename based on extension, then pattern, then filetype
 def color_for fname
+  return nil if fname == SEPARATOR
+
   extension = File.extname(fname)
   color = $ls_color[extension]
   return color if color
@@ -2129,7 +2135,7 @@ end
 # but prints on next line.FIXME 2019-03-24 - 00:08
 def perror text
   clear_last_line
-  print "\r#{RED}#{text}. Press a key.#{CLEAR}"
+  puts "\r#{RED}#{text}. Press a key.#{CLEAR}"
   get_char
 end
 
@@ -2218,6 +2224,70 @@ end
 
 def delete_file
   file_actions :delete
+end
+
+def move_instant
+  # FIXME: cannot be in target directory and do auto update
+
+  if $selected_files.empty?
+    target = readline "Enter target directory for moving files (#{@move_target}):"
+    return unless target
+    return if target == '' && @move_target.nil?
+
+    # take default value if user presses Enter
+    target = @move_target if target == ''
+    return unless target
+
+    # current dir if dot pressed FIXME you cannot move to current dir !!!
+    target = Dir.pwd if target == '.'
+    target = File.expand_path(target)
+    unless File.directory? target
+      perror "#{target} not a directory."
+      return
+    end
+    begin
+      f = current_file
+      FileUtils.mv f, target
+      @move_target = target
+      message "#{f} moved to #{target}. Target set."
+      @log.info "1.#{f} moved to #{target}."
+    rescue StandardError => exc
+      @log.warn "Case 1:"
+      @log.warn "Target is #{target}, file was #{f}"
+      @log.warn exc.to_s
+    end
+    refresh
+    return
+  end
+
+  # files selected. Use earlier target if there, else ask
+  target = @move_target
+  if target.nil? || target == ''
+    target = readline "Enter directory for moving files #{@move_target}:"
+    return unless target
+  end
+  target = File.expand_path(target)
+  unless File.directory? target
+    perror "#{target} not a directory."
+    return
+  end
+
+  files = $selected_files
+  # todo: shellwords
+  ccount = 0
+  files.each do |f|
+    FileUtils.mv f, target
+    @log.info "2.#{f} moved to #{target}."
+    ccount += 1
+  rescue StandardError => exc
+    @log.warn "Case 2:"
+    @log.warn "Target is #{target}, file was #{f}"
+    @log.warn exc.to_s
+    perror exc.to_s
+  end
+  @move_target = target
+  message "#{ccount} files moved to #{target}."
+  refresh
 end
 
 ## generic external command program
@@ -2321,7 +2391,10 @@ def file_actions(action = nil)
     h[:C] = :chdir
     h[:s] = :page_stat_for_file
     h[:f] = :file
-    h[:x] = :dtrx if filetype(array.first) == :zip
+    if filetype(array.first) == :zip
+      h[:x] = :dtrx
+      h[:u] = :unzip
+    end
     h[:g] = if File.extname(array.first) == '.gz'
               :gunzip
             else
@@ -2974,11 +3047,13 @@ def scripts
 
   # 2019-04-08 - to avoid confusion, we pass name of file under cursor
   # script may ignore this and use selected_files
+  reset_terminal
   system %( #{binding} "#{current_file}" )
 
   # system %(echo "#{cf}" | xargs #{binding})
   pause
-  redraw_required
+  setup_terminal
+  refresh
 end
 
 # allow user to select a script that generates filenames which
@@ -3017,6 +3092,7 @@ end
 # script could use old selection again.
 def write_selected_files
 
+  require 'pathname'
   # fname = File.join(File.dirname(CONFIG_FILE), 'selected_files')
   # 2019-04-10 - changed to ~/tmp otherwise confusion about location
   fname = File.join('~/tmp/', 'selected_files')
@@ -3028,8 +3104,20 @@ def write_selected_files
     return nil
   end
 
+  # TODO : what if user does not want full path e,g zip
+  # TODO: what if unix commands need escaped files ?
+  base = Pathname.new Dir.pwd
   File.open(fname, 'w') do |file|
-    $selected_files.each { |row| file.puts row }
+    $selected_files.each do |row|
+
+      # use relative filename. Otherwise things like zip and tar run into issues
+      unless @selected_files_fullpath_flag
+        p = Pathname.new(row)
+        row = p.relative_path_from(base)
+      end
+      row = Shellwords.escape(row) if @selected_files_escaped_flag
+      file.puts row
+    end
   end
 
   return fname
