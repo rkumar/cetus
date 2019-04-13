@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-13 23:20
+#  Last update: 2019-04-14 00:09
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -307,7 +307,7 @@ PAGER_COMMAND = {
   unknown: 'open'
 }
 $dir_position = {}
-$movement = $old_cursor = nil  # cursor movement has happened only, don't repaint
+@movement = @old_cursor = nil  # cursor movement has happened only, don't repaint
 $selection_mode = 1 # single select
 ## FLAGS
 @group_dirs = true
@@ -317,6 +317,7 @@ $selection_mode = 1 # single select
 @display_file_stats = true
 @selected_files_fullpath_flag = false
 @selected_files_escaped_flag = false
+@keys_to_clear = nil
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'.freeze
@@ -389,7 +390,8 @@ $history = []
 ## sta is where view (viewport) begins, cursor is current row/file
 $sta = $cursor = 0
 $visual_mode = false
-$status_color = 4 # status line, can be 2 3 4 5 6
+@status_color = 4 # status line, can be 2 3 4 5 6
+@status_color_right = 8 # status line right part
 
 # Menubar on top of screen
 @help = "#{BOLD}?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}C-x#{BOLD_OFF} File Actions  #{BOLD}q#{BOLD_OFF} Quit "
@@ -543,6 +545,7 @@ end
 # TODO: clean this up and simplify it
 # NOTE: earlier this was called on every key (up-arow down arrow, now only
 # called when page changes, so we only put directory name)
+# NOTE: called only from draw_directory.
 def status_line
     # prompt
     v_mm = $mode ? "[#{$mode}] " : ''
@@ -551,7 +554,7 @@ def status_line
 
     clear_last_line
 
-    # Print the filename at the right side of the status_line
+    # Print the filename at the right side of the status line
     # sometimes due to search, there is no file
     if cf
       if @debug_flag
@@ -574,7 +577,7 @@ def status_line
     # print search pattern if any
     # print message if any
     # print "\r#{v_mm}#{patt}#{$message}\e[m"
-    print "\r\e[33;4#{$status_color}m#{v_mm}#{patt}#{$message}\e[m"
+    print "\r\e[33;4#{@status_color}m#{v_mm}#{patt}#{$message}\e[m"
 
 end
 
@@ -667,20 +670,20 @@ end
 # clear the earlier position when we move.
 # Currently not using until I can implement chgat here.
 def clear_cursor
-  return unless $old_cursor
+  return unless @old_cursor
 
-  hint = get_shortcut($old_cursor)
-  if $old_cursor < $grows
+  hint = get_shortcut(@old_cursor)
+  if @old_cursor < $grows
     # FIXME: faster way of getting here ? see fff
-    # system "tput cup #{$old_cursor + 2} 0"
-    tput_cup $old_cursor, 0
+    # system "tput cup #{@old_cursor + 2} 0"
+    tput_cup @old_cursor, 0
     # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
     print "#{hint}  "
     return
   end
   wid = get_width $viewport.size, $grows
-  rows = $old_cursor % $grows
-  cols = ($old_cursor / $grows) * wid
+  rows = @old_cursor % $grows
+  cols = (@old_cursor / $grows) * wid
   # system "tput cup #{rows + 2} #{cols}"
   tput_cup rows, cols
   # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
@@ -697,6 +700,8 @@ def redraw_required(flag=true) $redraw_required = flag; end
 
 def resolve_key key
   ret = true
+  clear_message
+
   if key.match?(/^[a-pr-zZ]$/)
     # hint mode
     ret = select_hint $viewport, key
@@ -1407,14 +1412,14 @@ def next_page
   $cursor += $pagesize
   $sta = $cursor if $sta > $cursor
   $stact = 0
-  $old_cursor = nil
+  @old_cursor = nil
   redraw_required
 end
 
 def prev_page
   $sta -= $pagesize
   $cursor -= $pagesize
-  $old_cursor = nil
+  @old_cursor = nil
   # FIXME: check cursor sanity and if not changed then no redraw
   redraw_required
 end
@@ -2750,25 +2755,25 @@ end
 
 ## scroll cursor down
 def cursor_scroll_dn
-  $movement = :down
+  @movement = :down
   moveto(pos + MSCROLL)
 end
 
 def cursor_scroll_up
-  $movement = :up
+  @movement = :up
   moveto(pos - MSCROLL)
 end
 
 # move cursor down a line
 def cursor_dn
-  $movement = :down
-  $old_cursor = $cursor
+  @movement = :down
+  @old_cursor = $cursor
   moveto(pos + 1)
 end
 
 def cursor_up
-  $old_cursor = $cursor
-  $movement = :up
+  @old_cursor = $cursor
+  @movement = :up
   moveto(pos - 1)
 end
 
@@ -2786,8 +2791,8 @@ def moveto position
 
   # try to stop it from landing on separator
   if current_file == SEPARATOR
-    $cursor += 1 if $movement == :down
-    $cursor -= 1 if $movement == :up
+    $cursor += 1 if @movement == :down
+    $cursor -= 1 if @movement == :up
     return
   end
 
@@ -2806,13 +2811,13 @@ def moveto position
     # $sta = $cursor
   end
 
-  $movement = nil if oldsta != $sta # we need to redraw
+  @movement = nil if oldsta != $sta # we need to redraw
 
   star = [orig, $cursor].min
   fin = [orig, $cursor].max
   return unless $visual_mode
 
-  $movement = nil # visual mode needs to redraw page
+  @movement = nil # visual mode needs to redraw page
 
   # PWD has to be there in selction
   if selected? current_file
@@ -3424,6 +3429,7 @@ end
 # TODO: maybe we should pad it 2019-04-08 -
 def message mess
   $message = mess
+  @keys_to_clear = 2 if mess
 end
 
 def last_line
@@ -3439,7 +3445,7 @@ def clear_last_line
   # %*s        - set blank spaces for entire line
   # \e[m       - reset text mode
   # \r         - bring to start of line since callers will print.
-  print "\e[33;4%sm%*s\e[m\r" % [$status_color || '1', $gcols, " "]
+  print "\e[33;4%sm%*s\e[m\r" % [@status_color || '1', $gcols, ' ']
 end
 
 # print right aligned
@@ -3457,7 +3463,7 @@ def print_on_right text
   system "tput cup #{$glines} #{col}"
   # tput_cup $glines, $gcols - sz - 1
   # print text
-  print "\e[33;4#{$status_color}m#{text}\e[m"
+  print "\e[33;4#{@status_color_right}m#{text}\e[m"
 end
 
 # unused, should set bgcolor before printing
@@ -3467,6 +3473,15 @@ def print_last_line text
   print text
 end
 
+def clear_message
+  if @keys_to_clear
+    @keys_to_clear -= 1
+    if @keys_to_clear == 0
+      message nil
+      @keys_to_clear = nil
+    end
+  end
+end
 # main loop which calls all other programs
 def run
 
@@ -3492,24 +3507,25 @@ def run
 
     key = get_char
 
+
     unless resolve_key key # key did not map to file name, so don't redraw
       place_cursor
       next
     end
 
     # only movement has happened within this page, don't redraw
-    if $movement && $old_cursor
+    if @movement && @old_cursor
 
       # we may want to print debug info if flag is on
       if @debug_flag
         clear_last_line
         print_debug_info
-      elsif @filename_status_line
-        print_filename_status_line
+      else
+        status_line
       end
 
       place_cursor
-      $movement = false
+      @movement = false
       next
     end
 
