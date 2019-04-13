@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-13 14:07
+#  Last update: 2019-04-13 23:20
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -583,8 +583,15 @@ def print_debug_info cf=current_file()
 end
 
 def print_filename_status_line cf=current_file()
+  if @display_file_stats
+    mtime = if !File.exist? cf
+              # take care of dead links lstat TODO
+              date_format(File.lstat(cf).mtime)
+            else
+              date_format(File.stat(cf).mtime)
+            end
+  end
   # print size and mtime only if more data requested.
-  mtime = date_format(File.stat(cf).mtime) if @display_file_stats
   print_on_right "| #{mtime} | #{cf}".rjust(40)
 end
 
@@ -2249,7 +2256,7 @@ def move_instant
       f = current_file
       FileUtils.mv f, target
       @move_target = target
-      message "#{f} moved to #{target}. Target set."
+      message "#{f} moved to #{File.basename(target)}. Target set."
       @log.info "1.#{f} moved to #{target}."
     rescue StandardError => exc
       @log.warn "Case 1:"
@@ -2286,6 +2293,7 @@ def move_instant
     perror exc.to_s
   end
   @move_target = target
+  clean_selected_files
   message "#{ccount} files moved to #{target}."
   refresh
 end
@@ -2604,15 +2612,21 @@ def file_actions(action = nil)
     clear_last_line
     pause "#{menu_text} #{files} "
     system "#{menu_text} #{files}"
+    pause # putting this back 2019-04-13 - file doesn't show anything
+    message "Ran #{menu_text}."
     setup_terminal
     refresh
   end
 
   return if count == 0
 
-  # remove non-existent files from select list due to move or delete
-  #  or rename or whatever
+  clean_selected_files
 
+end
+
+# remove non-existent files from select list due to move or delete
+#  or rename or whatever
+def clean_selected_files
   $selected_files.select! { |x| x = File.expand_path(x); File.exist?(x) }
 end
 
