@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-14 19:11
+#  Last update: 2019-04-14 19:35
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -3552,6 +3552,12 @@ def run
 
     # only movement has happened within this page, don't redraw
     if @movement && @old_cursor
+      # if cursor has not moved
+      # keep testing this out 2019-04-14 -
+      if @old_cursor == $cursor
+        @movement = false
+        next
+      end
 
       # we may want to print debug info if flag is on
       if @debug_flag
