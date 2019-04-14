@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-14 14:00
+#  Last update: 2019-04-14 14:23
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -2412,7 +2412,6 @@ def file_actions(action = nil)
 
     # add chdir if dir of file under cursor is not same as current dir
     h[:C] = :chdir if File.dirname(File.expand_path(first)) != Dir.pwd
-    h[:M] = :set_move_target if File.directory?(first)
 
     h[:s] = :page_stat_for_file
     h[:f] = :file
@@ -2427,6 +2426,7 @@ def file_actions(action = nil)
             end
 
   end
+  h[:M] = :set_move_target if File.directory?(current_file)
   h[:z] = :zip unless filetype(first) == :zip
 
   # if first file has spaces then add remspace method
@@ -2473,10 +2473,11 @@ def file_actions(action = nil)
 
   when :move
     # multiple files can only be moved to a directory
-    target = readline "Move #{text} to : "
+    default = @move_target.nil? ? '.' : @move_target
+    target = readline "Move #{text} to (#{default}): "
     return unless target
 
-    target = '.' if target == ''
+    target = default if target == ''
     target = File.expand_path(target)
     return if target == ''
 
@@ -2541,7 +2542,7 @@ def file_actions(action = nil)
     end
 
   when :set_move_target
-    set_move_target first
+    set_move_target current_file
 
   when :zip
 
