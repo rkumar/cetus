@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# This script zips the contents of selected_files
+# It prompts for a file name to create, and defaults to archive.zip
+
+FILE=~/tmp/selected_files
+TODAY=$(date +"%Y%m%d%H%M")
+TARGET=archive_${TODAY}.zip
+pwd
+if [[ -f $FILE ]]; then
+  wc -l $FILE
+else
+  printf "Using $1. "
+  TARGET="$1.zip"
+  echo "$1" > $FILE
+fi
+printf "Enter zip file name ($TARGET): "
+read ANSWER
+ANSWER=${ANSWER:-$TARGET}
+cat $FILE | zip "$ANSWER" -@
+printf "Created #{ANSWER}"
