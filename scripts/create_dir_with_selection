@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# This creates a directory with selected files
+IFILE=~/tmp/selected_files
+TODAY=$(date +"%Y%m%d%H%M")
+TARGET="NewDirectory"
+if [[ -f $IFILE ]]; then
+  wc -l $IFILE
+else
+  echo "No files selected."
+  exit 1
+fi
+printf "Enter directory name ($TARGET): "
+read ANSWER
+ANSWER=${ANSWER:-$TARGET}
+mkdir "$ANSWER" || exit 1
+pwd
+
+while IFS= read -r file
+do
+  [ -f "$file" ] && mv "$file" "$ANSWER"
+done < "$IFILE"
