@@ -6,7 +6,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-14 19:40
+#  Last update: 2019-04-14 23:36
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -3520,28 +3520,29 @@ def clear_message
   end
 end
 
+# returns true if only cursor moved and redrawing not required
 def only_cursor_moved?
   # only movement has happened within this page, don't redraw
-  if @movement && @old_cursor
-    # if cursor has not moved
-    # keep testing this out 2019-04-14 -
-    if @old_cursor == $cursor
-      @movement = false
-      return true #next
-    end
+  return unless @movement && @old_cursor
 
-    # we may want to print debug info if flag is on
-    if @debug_flag
-      clear_last_line
-      print_debug_info
-    else
-      status_line
-    end
-
-    place_cursor
+  # if cursor has not moved (first or last item on screen)
+  # keep testing this out 2019-04-14 -
+  if @old_cursor == $cursor
     @movement = false
-    return true #next
+    return true # next in the loop
   end
+
+  # we may want to print debug info if flag is on
+  if @debug_flag
+    clear_last_line
+    print_debug_info
+  else
+    status_line
+  end
+
+  place_cursor
+  @movement = false
+  return true # next in the loop
 end
 
 
