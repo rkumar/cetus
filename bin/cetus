@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-14 23:57
+#  Last update: 2019-04-15 00:43
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -40,7 +40,7 @@ VERSION = '0.1.36.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
-$bindings = {
+@bindings = {
         '`' => 'main_menu',
         '=' => 'toggle_menu',
       'M-s' => 'selection_menu',
@@ -111,11 +111,11 @@ $bindings = {
 }
 
 ## clean this up a bit, copied from shell program and macro'd
-$kh = {}
-$kh["\eOP"] = 'F1'
-$kh["\e[A"] = 'UP'
-$kh["\e[5~"] = 'PGUP'
-$kh[''] = 'ESCAPE'
+@kh = {}
+@kh["\eOP"] = 'F1'
+@kh["\e[A"] = 'UP'
+@kh["\e[5~"] = 'PGUP'
+@kh[''] = 'ESCAPE'
 KEY_PGDN = "\e[6~"
 KEY_PGUP = "\e[5~"
 ## I needed to replace the O with a [ for this to work
@@ -126,20 +126,20 @@ KEY_F1 = "\eOP"
 KEY_UP = "\e[A"
 KEY_DOWN = "\e[B"
 
-$kh[KEY_PGDN] = 'PgDn'
-$kh[KEY_PGUP] = 'PgUp'
-$kh[KEY_HOME] = 'Home'
-$kh[KEY_END] = 'End'
-$kh[KEY_F1] = 'F1'
-$kh[KEY_UP] = 'UP'
-$kh[KEY_DOWN] = 'DOWN'
+@kh[KEY_PGDN] = 'PgDn'
+@kh[KEY_PGUP] = 'PgUp'
+@kh[KEY_HOME] = 'Home'
+@kh[KEY_END] = 'End'
+@kh[KEY_F1] = 'F1'
+@kh[KEY_UP] = 'UP'
+@kh[KEY_DOWN] = 'DOWN'
 KEY_LEFT = '[D'
 KEY_RIGHT = '[C'
-$kh["\eOQ"] = 'F2'
-$kh["\eOR"] = 'F3'
-$kh["\eOS"] = 'F4'
-$kh[KEY_LEFT] = 'LEFT'
-$kh[KEY_RIGHT] = 'RIGHT'
+@kh["\eOQ"] = 'F2'
+@kh["\eOR"] = 'F3'
+@kh["\eOS"] = 'F4'
+@kh[KEY_LEFT] = 'LEFT'
+@kh[KEY_RIGHT] = 'RIGHT'
 KEY_F5 = '[15~'
 KEY_F6 = '[17~'
 KEY_F7 = '[18~'
@@ -147,15 +147,15 @@ KEY_F8 = '[19~'
 KEY_F9 = '[20~'
 KEY_F10 = '[21~'
 KEY_S_F1 = '[1;2P'
-$kh[KEY_F5] = 'F5'
-$kh[KEY_F6] = 'F6'
-$kh[KEY_F7] = 'F7'
-$kh[KEY_F8] = 'F8'
-$kh[KEY_F9] = 'F9'
-$kh[KEY_F10] = 'F10'
+@kh[KEY_F5] = 'F5'
+@kh[KEY_F6] = 'F6'
+@kh[KEY_F7] = 'F7'
+@kh[KEY_F8] = 'F8'
+@kh[KEY_F9] = 'F9'
+@kh[KEY_F10] = 'F10'
 # testing out shift+Function. these are the codes my kb generates
-$kh[KEY_S_F1] = 'S-F1'
-$kh['[1;2Q'] = 'S-F2'
+@kh[KEY_S_F1] = 'S-F1'
+@kh['[1;2Q'] = 'S-F2'
 
 # copied from fff
 def clear_screen
@@ -168,8 +168,8 @@ def clear_screen
   #              Also sets cursor to (0,0).
   # ENV["TMUX:+\e[2J]"],
   printf("\e[%sH\e[9999C\e[1J\e[1;%sr", \
-         $glines - 0, # was 2
-         $glines) # was grows
+         @glines - 0, # was 2
+         @glines) # was grows
 end
 
 # copied from fff
@@ -198,9 +198,9 @@ def setup_terminal
   # '\e[2J':     Clear the screen.
   # '\e[1;Nr':   Limit scrolling to scrolling area.
   #              Also sets cursor to (0,0).
-  # printf("\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr", $glines)
+  # printf("\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr", @glines)
   # 2019-03-29 - XXX temporarily not hiding cursor to see if we can place it.
-  printf("\e[?1049h\e[?7l\e[?25h\e[2J\e[1;%sr", $glines)
+  printf("\e[?1049h\e[?7l\e[?25h\e[2J\e[1;%sr", @glines)
   # earlier glines was grows
 
   # Hide echoing of user input
@@ -258,7 +258,7 @@ def get_char
         # puts "got #{k}"
         buff += k.chr
       else
-        x = $kh[buff]
+        x = @kh[buff]
         return x if x
 
         # puts "returning with  #{buff}"
@@ -282,35 +282,35 @@ end
 
 ## GLOBALS
 # hints or shortcuts to get to files without moving
-$IDX = ('a'..'y').to_a
-$IDX.delete 'q'
-$IDX.concat ('za'..'zz').to_a
-$IDX.concat ('Za'..'Zz').to_a
-$IDX.concat ('ZA'..'ZZ').to_a
+IDX = ('a'..'y').to_a
+IDX.delete 'q'
+IDX.concat ('za'..'zz').to_a
+IDX.concat ('Za'..'Zz').to_a
+IDX.concat ('ZA'..'ZZ').to_a
 
-$selected_files = []
-$bookmarks = {}
-$mode = nil
-$glines = `tput lines`.to_i
-$gcols = `tput cols`.to_i
-$grows = $glines - 3 # can be a func
-# $pagesize = 60
-$gviscols = 3
-$pagesize = $grows * $gviscols # can be a func
-$stact = 0 # used when panning a folder to next column
-# $editor_mode = true
-$editor_mode = false # changed 2018-03-12 - so we start in pager mode
-$enhanced_mode = true
-$visual_block_start = nil
+@selected_files = []
+@bookmarks = {}
+@mode = nil
+@glines = `tput lines`.to_i
+@gcols = `tput cols`.to_i
+@grows = @glines - 3 # can be a func
+# @pagesize = 60
+@gviscols = 3
+@pagesize = @grows * @gviscols # can be a func
+@stact = 0 # used when panning a folder to next column
+# @editor_mode = true
+@editor_mode = false # changed 2018-03-12 - so we start in pager mode
+@enhanced_mode = true
+@visual_block_start = nil
 PAGER_COMMAND = {
   text: 'most',
   image: 'open',
   zip: 'tar ztvf %% | most',
   unknown: 'open'
 }.freeze
-$dir_position = {}
+@dir_position = {}
 @movement = @old_cursor = nil # cursor movement has happened only, don't repaint
-$selection_mode = 1 # single select
+@selection_mode = 1 # single select
 ## FLAGS
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
@@ -353,7 +353,7 @@ CURSOR_COLOR = REVERSE
 
 # This hash contains color codes for extensions. It is updated from
 # LS_COLORS.
-$ls_color = {
+@ls_color = {
        '.rb' => RED,
       '.tgz' => MAGENTA,
       '.zip' => MAGENTA,
@@ -363,10 +363,10 @@ $ls_color = {
        '.sh' => CYAN
 }
 # This hash contains colors for file patterns, updated from LS_COLORS
-$ls_pattern = {}
+@ls_pattern = {}
 # This hash contains colors for file types, updated from LS_COLORS
 # Default values in absence of LS_COLORS
-$ls_ftype = {
+@ls_ftype = {
   'directory' =>  BLUE,
        'link' =>  "\e[01;36m",
          'mi' =>  "\e[01;31;7m",
@@ -375,23 +375,23 @@ $ls_ftype = {
 }
 ## --------------------------------------------- ##
 
-$patt = nil
-$ignorecase = true
-$quitting = false
-$modified = $writing = false
-$visited_files = []
+@patt = nil
+@ignorecase = true
+@quitting = false
+@modified = @writing = false
+@visited_files = []
 ## dir stack for popping
-$visited_dirs = []
+@visited_dirs = []
 ## dirs where some work has been done, for saving and restoring
-$used_dirs = []
+@used_dirs = []
 # zsh o = order m = modified time
-$default_sort_order = 'Om'
-$sorto = $default_sort_order
-$viewctr = 0
-$history = []
+@default_sort_order = 'Om'
+@sorto = @default_sort_order
+@viewctr = 0
+@history = []
 ## sta is where view (viewport) begins, cursor is current row/file
-$sta = $cursor = 0
-$visual_mode = false
+@sta = @cursor = 0
+@visual_mode = false
 @status_color = 4 # status line, can be 2 3 4 5 6
 @status_color_right = 8 # status line right part
 
@@ -408,19 +408,19 @@ def read_directory
   # -r Ignore the escape conventions of echo.
   # zshglob M = MARK_DIRS
 
-  $filterstr ||= 'M'
-  # $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}#{$filterstr})'`.split("\n")
-  $files = list_files
-  $files = group_directories_first($files) if @group_dirs
-  return unless $enhanced_mode
+  @filterstr ||= 'M'
+  # @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}#{@filterstr})'`.split("\n")
+  @files = list_files
+  @files = group_directories_first(@files) if @group_dirs
+  return unless @enhanced_mode
 
   enhance_file_list
-  $files = $files.uniq
+  @files = @files.uniq
 end
 
 # return a list of directory contents sorted as per sort order
 # NOTE: FNM_CASEFOLD does not work with Dir.glob
-def list_files dir='*', sorto=$sorto, hidden=$hidden, _filter=$filterstr
+def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
   dir += '/*' if File.directory?(dir)
   dir = dir.gsub('//', '/')
 
@@ -462,7 +462,7 @@ def list_files dir='*', sorto=$sorto, hidden=$hidden, _filter=$filterstr
     end
   end
 
-  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && $ignorecase
+  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && @ignorecase
 
   # zsh gives mtime sort with latest first, ruby gives latest last
   sorted_files.reverse! if sorto[0] == 'O'
@@ -485,26 +485,26 @@ end
 
 # ------------------- create_viewport ------------------ #
 def create_viewport
-  $view = if $patt
-            if $ignorecase
-              $files.grep(/#{$patt}/i)
+  @view = if @patt
+            if @ignorecase
+              @files.grep(/#{@patt}/i)
             else
-              $files.grep(/#{$patt}/)
+              @files.grep(/#{@patt}/)
             end
           else
-            $files
+            @files
           end
 
-  fl = $view.size
-  $sta = 0 if $sta >= fl || $sta < 0
-  $cursor = 0 if $cursor >= fl || $cursor < 0
+  fl = @view.size
+  @sta = 0 if @sta >= fl || @sta < 0
+  @cursor = 0 if @cursor >= fl || @cursor < 0
 
   # NOTE if we make cursor zero, then it can be < sta so in the next line
   #  it will be made equal to sta which we may not want
-  $cursor = $sta if $sta > $cursor
+  @cursor = @sta if @sta > @cursor
 
   # viewport are the files that are visible, subset of view
-  $viewport = $view[$sta, $pagesize]
+  @viewport = @view[@sta, @pagesize]
 end
 # ------------- end of create_viewport --------------------------------#
 
@@ -514,28 +514,28 @@ def print_title
   print "#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
 
   # print 1 of n files, sort order, filter etc details
-  $title ||= Dir.pwd.sub(ENV['HOME'], '~')
+  @title ||= Dir.pwd.sub(ENV['HOME'], '~')
 
   # Add bookmark next to name of dir, if exists
-  bm = $bookmarks.key(Dir.pwd)
+  bm = @bookmarks.key(Dir.pwd)
   bm = " ('#{bm})" if bm
 
-  fin = $sta + $viewport.size
-  fl = $view.size
+  fin = @sta + @viewport.size
+  fl = @view.size
 
   # fix count of entries so separator and enhanced entries don't show up
-  if $enhanced_mode
-    ix = $viewport.index SEPARATOR
-    fin = $sta + ix if ix
+  if @enhanced_mode
+    ix = @viewport.index SEPARATOR
+    fin = @sta + ix if ix
 
-    ix = $view.index SEPARATOR
+    ix = @view.index SEPARATOR
     fl = ix if ix
   end
 
-  t = fl.zero? ? "#{$title}#{bm}  No files." : "#{$title}#{bm}  #{$sta + 1} to #{fin} of #{fl}  #{$sorto} F:#{$filterstr}"
+  t = fl.zero? ? "#{@title}#{bm}  No files." : "#{@title}#{bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr}"
 
   # don't exceed columns while printing
-  t = t[t.size - $gcols..-1] if t.size >= $gcols
+  t = t[t.size - @gcols..-1] if t.size >= @gcols
 
   print "#{BOLD}#{t}#{CLEAR}\n"
   print 'EMPTY' if fl.zero?
@@ -548,9 +548,9 @@ end
 # NOTE: called only from draw_directory.
 def status_line
   # prompt
-  v_mm = $mode ? "[#{$mode}] " : ''
+  v_mm = @mode ? "[#{@mode}] " : ''
   cf = current_file
-  $message = ' | No matches. Press ESCAPE' if $patt && !cf
+  @message = ' | No matches. Press ESCAPE' if @patt && !cf
 
   clear_last_line
 
@@ -567,21 +567,21 @@ def status_line
   end
   # move to beginning of line, reset text mode after printing
   # patt and message are together, no gap, why not ? 2019-04-08 -
-  if $patt && $patt != ''
-    patt = "[/#{$patt}]"
-    patt[-1] = '/i]' if $ignorecase
+  if @patt && @patt != ''
+    patt = "[/#{@patt}]"
+    patt[-1] = '/i]' if @ignorecase
   end
   # bring cursor to start of line
   # add background color
   # print mode
   # print search pattern if any
   # print message if any
-  # print "\r#{v_mm}#{patt}#{$message}\e[m"
-  print "\r\e[33;4#{@status_color}m#{v_mm}#{patt}#{$message}\e[m"
+  # print "\r#{v_mm}#{patt}#{@message}\e[m"
+  print "\r\e[33;4#{@status_color}m#{v_mm}#{patt}#{@message}\e[m"
 end
 
 def print_debug_info cf=current_file
-  print_on_right "len:#{cf.length}/#{$temp_wid} = #{$sta},#{$cursor},#{$stact},#{$viewport.size},#{$grows} | #{cf}"
+  print_on_right "len:#{cf.length}/#{@temp_wid} = #{@sta},#{@cursor},#{@stact},#{@viewport.size},#{@grows} | #{cf}"
 end
 
 def print_filename_status_line cf=current_file
@@ -605,11 +605,11 @@ end
 
 # should we do a read of the dir
 def rescan?
-  $rescan_required
+  @rescan_required
 end
 
 def rescan_required flag=true
-  $rescan_required = flag
+  @rescan_required = flag
   redraw_required if flag
 end
 
@@ -630,11 +630,11 @@ def draw_directory
   print_title
 
   # add hint and format the line
-  buff = format_array $viewport
+  buff = format_array @viewport
 
   # break viewport into as many columns as required
   # This is where directories get their blue color
-  buff = columnate buff, $grows
+  buff = columnate buff, @grows
 
   # starts printing array on line 3
   buff.each { |line| print line, "\n" }
@@ -653,18 +653,18 @@ end
 # FIXME color of original hint lost
 def place_cursor
   # clear_cursor
-  # hint = get_shortcut($cursor)
-  c = $cursor - $sta
-  if c < $grows
+  # hint = get_shortcut(@cursor)
+  c = @cursor - @sta
+  if c < @grows
     # system "tput cup #{c + 2} 0"
     # print "\e[#{c + 3};0H"
     tput_cup c, 0
     # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
     return
   end
-  wid = get_width $viewport.size, $grows
-  rows = c % $grows
-  cols = (c / $grows) * wid
+  wid = get_width @viewport.size, @grows
+  rows = c % @grows
+  cols = (c / @grows) * wid
   # system "tput cup #{rows + 2} #{cols}"
   # print "\e[#{rows + 3};#{cols + 1}H"
   tput_cup rows, cols
@@ -677,7 +677,7 @@ def clear_cursor
   return unless @old_cursor
 
   hint = get_shortcut(@old_cursor)
-  if @old_cursor < $grows
+  if @old_cursor < @grows
     # FIXME: faster way of getting here ? see fff
     # system "tput cup #{@old_cursor + 2} 0"
     tput_cup @old_cursor, 0
@@ -685,9 +685,9 @@ def clear_cursor
     print "#{hint}  "
     return
   end
-  wid = get_width $viewport.size, $grows
-  rows = @old_cursor % $grows
-  cols = (@old_cursor / $grows) * wid
+  wid = get_width @viewport.size, @grows
+  rows = @old_cursor % @grows
+  cols = (@old_cursor / @grows) * wid
   # system "tput cup #{rows + 2} #{cols}"
   tput_cup rows, cols
   # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
@@ -700,8 +700,9 @@ def tput_cup row, col
   print "\e[#{row + 3};#{col + 1}H"
 end
 
+# FIXME flag is unused ???? XXX
 def redraw_required flag=true
-  $redraw_required = flag
+  @redraw_required = flag
 end
 
 def resolve_key key
@@ -710,11 +711,11 @@ def resolve_key key
 
   if key.match?(/^[a-pr-zZ]$/)
     # hint mode
-    ret = select_hint $viewport, key
+    ret = select_hint @viewport, key
   elsif key == 'BACKSPACE'
     # do we really need this TODO
-    $patt = $patt[0..-2] if $patt && !$patt.empty?
-    $message = $patt = nil if $patt == ''
+    @patt = @patt[0..-2] if @patt && !@patt.empty?
+    @message = @patt = nil if @patt == ''
   elsif '0123456789'.include? key
     resolve_numeric_key key
   else
@@ -725,7 +726,7 @@ end
 
 def resolve_binding key
   # fetch binding for key
-  x = $bindings[key]
+  x = @bindings[key]
 
   # remove comment string so only binding is left
   x, = x.split(':') if x
@@ -744,7 +745,7 @@ end
 # numbers represent quick bookmarks
 # if bookmark exists, go to else create it.
 def resolve_numeric_key key
-  d = $bookmarks[key]
+  d = @bookmarks[key]
   if d
     change_dir d
     return
@@ -755,7 +756,7 @@ def resolve_numeric_key key
 end
 
 def set_bookmark key, dir=Dir.pwd
-  $bookmarks[key] = dir
+  @bookmarks[key] = dir
 end
 
 ## write current dir to a file so we can ccd to it when exiting
@@ -802,7 +803,7 @@ def columnate ary, siz
   # if less than sz then 1 col and full width
   #
   wid = get_width ary.size, siz
-  $temp_wid = wid
+  @temp_wid = wid
 
   # ix refers to the index in the complete file list, wherease we only show 60 at a time
   ix = 0
@@ -900,12 +901,12 @@ def truncate_formatted_filename f, unformatted_len, wid
 end
 
 def get_width arysz, siz
-  ars = [$pagesize, arysz].min
+  ars = [@pagesize, arysz].min
   d = 0
-  return $gcols - d if ars <= siz
+  return @gcols - d if ars <= siz
 
   tmp = (ars * 1.000 / siz).ceil
-  wid = $gcols / tmp - d
+  wid = @gcols / tmp - d
   wid
 end
 
@@ -945,7 +946,7 @@ def format_array ary
     ind = cur = mark = '-' if f == SEPARATOR
 
     mark = '+' if visited? f
-    # cur = CURMARK if ix + $sta == $cursor # 2019-03-29 - removed reduced calls
+    # cur = CURMARK if ix + @sta == @cursor # 2019-03-29 - removed reduced calls
     # NOTE seems like f and ary[ix] are the same
     mark = GMARK if selected?(ary[ix])
 
@@ -953,7 +954,7 @@ def format_array ary
     fullname = f[0] == '~' ? File.expand_path(f) : f
     color = color_for fullname
 
-    if $long_listing
+    if @long_listing
       begin
         if File.exist? f
           stat = File.stat(f)
@@ -997,12 +998,12 @@ def color_for fname
   return nil if fname == SEPARATOR
 
   extension = File.extname(fname)
-  color = $ls_color[extension]
+  color = @ls_color[extension]
   return color if color
 
   # check file against patterns
   if File.file?(fname)
-    $ls_pattern.each_pair do |k, v|
+    @ls_pattern.each_pair do |k, v|
       # if fname.match?(/k/)
       if /#{k}/.match?(fname)
         # @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
@@ -1017,14 +1018,14 @@ def color_for fname
   if File.exist? fname
     # @log.debug "Filetype:#{File.ftype(fname)}"
 
-    return $ls_ftype[File.ftype(fname)] if $ls_ftype.key? File.ftype(fname)
-    return $ls_ftype['ex'] if File.executable?(fname)
+    return @ls_ftype[File.ftype(fname)] if @ls_ftype.key? File.ftype(fname)
+    return @ls_ftype['ex'] if File.executable?(fname)
   else
     # orphan file, but fff uses mi
-    return $ls_ftype['mi'] if File.symlink?(fname)
+    return @ls_ftype['mi'] if File.symlink?(fname)
 
     @log.warn "FILE WRONG: #{fname}"
-    return $ls_ftype['or']
+    return @ls_ftype['or']
   end
 
   nil
@@ -1033,17 +1034,17 @@ end
 def parse_ls_colors
   colorvar = ENV['LS_COLORS']
   if colorvar.nil?
-    $ls_colors_found = nil
+    @ls_colors_found = nil
     return
   end
-  $ls_colors_found = true
+  @ls_colors_found = true
   ls = colorvar.split(':')
   ls.each do |e|
     patt, colr = e.split '='
     colr = "\e[" + colr + 'm'
     if e.start_with? '*.'
       # extension, avoid '*' and use the rest as key
-      $ls_color[patt[1..-1]] = colr
+      @ls_color[patt[1..-1]] = colr
       # @log.debug "COLOR: Writing extension (#{patt})."
     elsif e[0] == '*'
       # file pattern, this would be a glob pattern not regex
@@ -1055,7 +1056,7 @@ def parse_ls_colors
       patt = patt.gsub('*', '.*')
       patt = "^#{patt}" if patt[0] != '.'
       patt = "#{patt}$" if patt[-1] != '*'
-      $ls_pattern[patt] = colr
+      @ls_pattern[patt] = colr
       # @log.debug "COLOR: Writing file (#{patt})."
     elsif patt.length == 2
       # file type, needs to be mapped to what ruby will return
@@ -1072,19 +1073,19 @@ def parse_ls_colors
       # ex = file which is executable (ie. has 'x' set in permissions).
       case patt
       when 'di'
-        $ls_ftype['directory'] = colr
+        @ls_ftype['directory'] = colr
       when 'cd'
-        $ls_ftype['characterSpecial'] = colr
+        @ls_ftype['characterSpecial'] = colr
       when 'bd'
-        $ls_ftype['blockSpecial'] = colr
+        @ls_ftype['blockSpecial'] = colr
       when 'pi'
-        $ls_ftype['fifo'] = colr
+        @ls_ftype['fifo'] = colr
       when 'ln'
-        $ls_ftype['link'] = colr
+        @ls_ftype['link'] = colr
       when 'so'
-        $ls_ftype['socket'] = colr
+        @ls_ftype['socket'] = colr
       else
-        $ls_ftype[patt] = colr
+        @ls_ftype[patt] = colr
       end
       # @log.debug "COLOR: ftype #{patt}"
     end
@@ -1100,11 +1101,11 @@ def select_hint view, key
   return nil unless f
   return nil if f == SEPARATOR
 
-  $cursor = $sta + ix
+  @cursor = @sta + ix
 
-  if $mode == 'SEL'
+  if @mode == 'SEL'
     toggle_select f
-  elsif $mode == 'COM'
+  elsif @mode == 'COM'
     # not being called any longer I think
     run_command f
   else
@@ -1118,10 +1119,10 @@ def toggle_select f=current_file
   if selected? f
     remove_from_selection f
   else
-    $selected_files.clear if $selection_mode == 1
+    @selected_files.clear if @selection_mode == 1
     add_to_selection f
   end
-  message "#{$selected_files.count} files selected.   "
+  message "#{@selected_files.count} files selected.   "
   # XXX is it possible to just redraw this line
   redraw_required
 end
@@ -1158,7 +1159,7 @@ def open_file f
     setup_terminal
     # XXX maybe use absolute_path instead of hardcoding
     f = Dir.pwd + '/' + f if f[0] != '/'
-    $visited_files.insert(0, f)
+    @visited_files.insert(0, f)
     push_used_dirs Dir.pwd
   else
     perror "open_file: (#{f}) not found"
@@ -1177,13 +1178,13 @@ end
 def edit_current
   command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
   run_on_current command
-  $visited_files.insert(0, current_file)
+  @visited_files.insert(0, current_file)
 end
 
 def open_current
   opener = /darwin/.match?(RUBY_PLATFORM) ? 'open' : 'xdg-open'
   run_on_current opener
-  $visited_files.insert(0, current_file)
+  @visited_files.insert(0, current_file)
 end
 
 # run given command on current file
@@ -1246,7 +1247,7 @@ def change_dir f
 
   # before leaving a dir we save it in the list, as well as the cursor
   # position, so we can restore that position when we return
-  $visited_dirs.insert(0, Dir.pwd)
+  @visited_dirs.insert(0, Dir.pwd)
   save_dir_pos
 
   f = File.expand_path(f)
@@ -1258,25 +1259,25 @@ def change_dir f
 end
 
 def goto_previous_dir
-  prev_dir = $visited_dirs.first
+  prev_dir = @visited_dirs.first
   return unless prev_dir
 
   change_dir prev_dir
 end
 
 def index_of dir
-  $files.index(dir)
+  @files.index(dir)
 end
 
 ## clear sort order and refresh listing, used typically if you are in some view
 #  such as visited dirs or files
 def escape
-  $sorto = nil
-  $sorto = $default_sort_order
-  $viewctr = 0
-  $title = nil
-  $filterstr = 'M'
-  $message = nil
+  @sorto = nil
+  @sorto = @default_sort_order
+  @viewctr = 0
+  @title = nil
+  @filterstr = 'M'
+  @message = nil
   visual_block_clear
   refresh
 end
@@ -1284,8 +1285,8 @@ end
 ## refresh listing after some change like option change, or toggle
 # Should we check selected_files array also for deleted/renamed files
 def refresh
-  $patt = nil
-  $title = nil
+  @patt = nil
+  @title = nil
   rescan_required
 end
 
@@ -1299,14 +1300,14 @@ end
 
 ## unselect all files
 def unselect_all
-  $selected_files = []
-  $visual_mode = nil
+  @selected_files = []
+  @visual_mode = nil
 end
 
 ## select all entries (files and directories)
 def select_all
   dir = Dir.pwd
-  $selected_files = $view.map { |file| File.join(dir, file) }
+  @selected_files = @view.map { |file| File.join(dir, file) }
 end
 
 ## accept dir to goto and change to that ( can be a file too)
@@ -1349,14 +1350,14 @@ end
 #  (or deselecting).
 #
 def toggle_selection_mode
-  if $mode == 'SEL'
-    $selection_mode = 1
+  if @mode == 'SEL'
+    @selection_mode = 1
     unselect_all
-    $mode = nil
+    @mode = nil
     message 'Selection mode is single.   '
   else
-    $selection_mode = 2
-    $mode = 'SEL'
+    @selection_mode = 2
+    @mode = 'SEL'
     message 'Typing a hint selects the file. Typing again will clear   .  '
   end
 end
@@ -1374,9 +1375,9 @@ def goto_parent_dir
   return if curr == Dir.pwd
 
   # get index of child dir in this dir, and set cursor to it.
-  index = $files.index(curr + '/')
+  index = @files.index(curr + '/')
   pause "WARNING: Could not find #{curr} in this directory." unless index
-  $cursor = index if index
+  @cursor = index if index
 end
 
 def goto_home_dir
@@ -1391,7 +1392,7 @@ def goto_bookmark key=nil
     print 'Enter bookmark char: '
     key = get_char
   end
-  d = $bookmarks[key]
+  d = @bookmarks[key]
   if d
     change_dir d
   else
@@ -1404,22 +1405,22 @@ def enter_regex
   # print 'Enter (regex) pattern: '
   # move to beginning of line, and clear till EOL
   # print "\r\e[K"
-  $patt = readline '/'
+  @patt = readline '/'
 end
 
 # page/scroll down.
 def next_page
-  $sta += $pagesize
-  $cursor += $pagesize
-  $sta = $cursor if $sta > $cursor
-  $stact = 0
+  @sta += @pagesize
+  @cursor += @pagesize
+  @sta = @cursor if @sta > @cursor
+  @stact = 0
   @old_cursor = nil
   redraw_required
 end
 
 def prev_page
-  $sta -= $pagesize
-  $cursor -= $pagesize
+  @sta -= @pagesize
+  @cursor -= @pagesize
   @old_cursor = nil
   # FIXME: check cursor sanity and if not changed then no redraw
   redraw_required
@@ -1439,7 +1440,7 @@ def print_help
     file.puts
     ary = []
     # 2019-03-19 -  if : then show text after colon
-    $bindings.each_pair do |k, v|
+    @bindings.each_pair do |k, v|
       vv = v.tr('_', ' ')
       vv = vv.split(':')[1].strip if vv.include?(':')
       ary.push "#{k.ljust(7)}  =>  #{vv}"
@@ -1478,13 +1479,13 @@ def debug_vars
   page_with_tempfile do |file|
     file.puts "DEBUG VARIABLES for #{current_file}:"
     file.puts
-    file.puts "sta    #{$sta}"
-    file.puts "cursor #{$cursor}"
-    file.puts "stact  #{$stact}"
-    file.puts "viewport.size  #{$viewport.size}"
-    file.puts "pagesize       #{$pagesize}"
-    file.puts "view.size      #{$view.size}"
-    file.puts "grows          #{$grows}"
+    file.puts "sta    #{@sta}"
+    file.puts "cursor #{@cursor}"
+    file.puts "stact  #{@stact}"
+    file.puts "viewport.size  #{@viewport.size}"
+    file.puts "pagesize       #{@pagesize}"
+    file.puts "view.size      #{@view.size}"
+    file.puts "grows          #{@grows}"
     file.puts "File: #{current_file}"
     file.puts
     file.puts "Opener: #{opener_for(current_file)}"
@@ -1499,7 +1500,7 @@ end
 def view_bookmarks
   clear_last_line
   puts 'Bookmarks: '
-  $bookmarks.each_pair { |k, v| puts "#{k.ljust(7)}  =>  #{v}" }
+  @bookmarks.each_pair { |k, v| puts "#{k.ljust(7)}  =>  #{v}" }
   puts
   print 'Enter bookmark to goto: '
   key = get_char
@@ -1561,11 +1562,11 @@ def menu title, h
   # 2019-03-09 - trying out using `column` to print in cols
   ary = []
 
-  # 2019-04-07 - check $bindings for shortcut and get key, add global
+  # 2019-04-07 - check @bindings for shortcut and get key, add global
   #  binding in brackets
   h.each_pair do |k, v|
     # get global binding
-    scut = $bindings.key(v.to_s)
+    scut = @bindings.key(v.to_s)
     scut = " (#{scut})" if scut
 
     ary << " #{k}: #{v} #{scut}"
@@ -1608,58 +1609,58 @@ def toggle_menu
     # FNM_DOTMATCH
     #  working everywhere
     # zsh D - dot files should show
-    $hidden = $hidden ? nil : 'D'
-    message "Show hidden is now #{!$hidden.nil?}"
+    @hidden = @hidden ? nil : 'D'
+    message "Show hidden is now #{!@hidden.nil?}"
     rescan_required
   when :toggle_case
-    $ignorecase = !$ignorecase
-    message "Ignore Case is now #{$ignorecase}"
+    @ignorecase = !@ignorecase
+    message "Ignore Case is now #{@ignorecase}"
     rescan_required
   when :toggle_group_dirs
     @group_dirs = !@group_dirs
     message "Group Dirs First is now #{@group_dirs}"
     rescan_required
   when :toggle_columns
-    $gviscols = if $gviscols == 1
+    @gviscols = if @gviscols == 1
                   3
                 else
                   1
                 end
-    # $long_listing = false if $gviscols > 1
-    x = $grows * $gviscols
-    $pagesize = $pagesize == x ? $grows : x
-    message "Visible columns now set to #{$gviscols}"
+    # @long_listing = false if @gviscols > 1
+    x = @grows * @gviscols
+    @pagesize = @pagesize == x ? @grows : x
+    message "Visible columns now set to #{@gviscols}"
     rescan_required
   when :toggle_pager_mode
-    $editor_mode = !$editor_mode
-    $default_command = if $editor_mode
+    @editor_mode = !@editor_mode
+    @default_command = if @editor_mode
                          ENV['EDITOR'] # earlier nil # 2019-03-10 -
                          # it was nil so we could set a default command
                        else
                          ENV['MANPAGER'] || ENV['PAGER']
                        end
-    message "Default command is #{$default_command}"
+    message "Default command is #{@default_command}"
   when :toggle_enhanced_list
-    $enhanced_mode = !$enhanced_mode
-    message "Enhanced mode is #{$enhanced_mode}"
+    @enhanced_mode = !@enhanced_mode
+    message "Enhanced mode is #{@enhanced_mode}"
     rescan_required
 
   when :toggle_long_list
-    $long_listing = !$long_listing
-    if $long_listing
-      $saved_gviscols = $gviscols
-      $gviscols = 1
-      $pagesize = $grows
+    @long_listing = !@long_listing
+    if @long_listing
+      @saved_gviscols = @gviscols
+      @gviscols = 1
+      @pagesize = @grows
     else
-      $gviscols = $saved_gviscols || 3
-      x = $grows * $gviscols
-      $pagesize = $pagesize == x ? $grows : x
+      @gviscols = @saved_gviscols || 3
+      x = @grows * @gviscols
+      @pagesize = @pagesize == x ? @grows : x
     end
-    if $stact > 0
-      $sta = $stact
-      $stact = 0 # in case user was panned 2019-03-20 -
+    if @stact > 0
+      @sta = @stact
+      @stact = 0 # in case user was panned 2019-03-20 -
     end
-    message "Long listing is #{$long_listing}, vis cols is #{$gviscols}"
+    message "Long listing is #{@long_listing}, vis cols is #{@gviscols}"
     rescan_required
   when :toggle_debug_flag
     @debug_flag = !@debug_flag
@@ -1717,7 +1718,7 @@ def order_menu
     lo = ''
   end
   ## This needs to persist and be a part of all listings, put in change_dir.
-  $sorto = lo
+  @sorto = lo
   message "Sorted on #{menu_text}"
   rescan_required
 end
@@ -1741,7 +1742,7 @@ def command_menu
   #
   h = { t: :today, D: :default_command, R: :remove_from_list,
         v: :view_selected_files }
-  h[:e] = if $editor_mode
+  h[:e] = if @editor_mode
             :pager_mode
           else
             :editor_mode
@@ -1749,11 +1750,11 @@ def command_menu
   _, menu_text = menu 'Command Menu', h
   case menu_text
   when :pager_mode
-    $editor_mode = false
-    $default_command = ENV['MANPAGER'] || ENV['PAGER']
+    @editor_mode = false
+    @default_command = ENV['MANPAGER'] || ENV['PAGER']
   when :editor_mode
-    $editor_mode = true
-    $default_command = nil
+    @editor_mode = true
+    @default_command = nil
   when :ffind
     ffind
   when :locate
@@ -1761,20 +1762,20 @@ def command_menu
   when :today
     # zshglob: M = MARK_DIRS with slash
     # zshglob: 'm0' 'm' = modified time, '0' = 0 days ago
-    $files = `zsh -c 'print -rl -- *(#{$hidden}Mm0)'`.split("\n")
-    $title = "Today's files"
+    @files = `zsh -c 'print -rl -- *(#{@hidden}Mm0)'`.split("\n")
+    @title = "Today's files"
   when :default_command
     puts ' This no longer works'
     puts 'Selecting a file usually invokes $EDITOR'
     puts 'What command do you want to use repeatedly on selected files: '
-    $default_command = gets.chomp
-    if $default_command != ''
+    @default_command = gets.chomp
+    if @default_command != ''
       print 'Second part of command (maybe blank): '
-      $default_command2 = gets.chomp
+      @default_command2 = gets.chomp
     else
       print 'Cleared default command, will default to $EDITOR'
-      $default_command2 = nil
-      $default_command = nil
+      @default_command2 = nil
+      @default_command = nil
     end
   end
   # redraw
@@ -1793,17 +1794,17 @@ def extras
   key, menu_text = menu 'Extras Menu', h
   case menu_text
   when :one_column
-    $pagesize = $grows
+    @pagesize = @grows
   when :multi_column
-    # $pagesize = 60
-    $pagesize = $grows * $gviscols
+    # @pagesize = 60
+    @pagesize = @grows * @gviscols
   when :columns
-    print "How many columns to show: 1-6 [current #{$gviscols}]? "
+    print "How many columns to show: 1-6 [current #{@gviscols}]? "
     key = get_char
     key = key.to_i
     if key > 0 && key < 7
-      $gviscols = key.to_i
-      $pagesize = $grows * $gviscols
+      @gviscols = key.to_i
+      @pagesize = @grows * @gviscols
     end
   end
 end
@@ -1815,38 +1816,38 @@ def filter_menu
   files = nil
   case menu_text
   when :dirs
-    $filterstr = '/M'
+    @filterstr = '/M'
     # zsh /M MARK_DIRS appends trailing '/' to directories
-    files = `zsh -c 'print -rl -- *(#{$sorto}/M)'`.split("\n")
-    $title = 'Filter: directories only'
+    files = `zsh -c 'print -rl -- *(#{@sorto}/M)'`.split("\n")
+    @title = 'Filter: directories only'
   when :files
-    $filterstr = '.'
+    @filterstr = '.'
     # zsh '.' for files, '/' for dirs
-    files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.)'`.split("\n")
-    $title = 'Filter: files only'
+    files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}.)'`.split("\n")
+    @title = 'Filter: files only'
   when :emptydirs
-    $filterstr = '/D^F'
+    @filterstr = '/D^F'
     # zsh F = full dirs, ^F empty dirs
-    files = `zsh -c 'print -rl -- *(#{$sorto}/D^F)'`.split("\n")
-    $title = 'Filter: empty directories'
+    files = `zsh -c 'print -rl -- *(#{@sorto}/D^F)'`.split("\n")
+    @title = 'Filter: empty directories'
   when :emptyfiles
-    $filterstr = '.L0'
+    @filterstr = '.L0'
     # zsh .L size in bytes
-    files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}.L0)'`.split("\n")
-    $title = 'Filter: empty files'
+    files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}.L0)'`.split("\n")
+    @title = 'Filter: empty files'
   when :reduce_list
     files = reduce
   when :extension
     files = filter_for_current_extension
   end
   if files && files.count > 0
-    $files = files
-    $stact = 0
-    $message = "Filtered on #{menu_text}. Press ESC to return."
+    @files = files
+    @stact = 0
+    @message = "Filtered on #{menu_text}. Press ESC to return."
     # redraw
   else
     perror 'Sorry, No files. '
-    $title = nil
+    @title = nil
   end
 end
 
@@ -1855,47 +1856,47 @@ def reduce pattern=nil
     last_line 'Enter a pattern to reduce current list: '
     pattern = gets.chomp
   end
-  $title = "Filter: pattern #{pattern}"
-  $files = $files.select { |f| f.match(pattern) }
+  @title = "Filter: pattern #{pattern}"
+  @files = @files.select { |f| f.match(pattern) }
 end
 
 def filter_for_current_extension
   extn = File.extname(current_file)
   return unless extn
 
-  $files = $files.select { |f| !File.directory?(f) && extn == File.extname(f) }
+  @files = @files.select { |f| !File.directory?(f) && extn == File.extname(f) }
 end
 
 def select_from_used_dirs
-  $title = 'Used Directories'
+  @title = 'Used Directories'
   home = File.expand_path '~'
-  $files = $used_dirs.uniq.map { |path| path.sub(home.to_s, '~') }
+  @files = @used_dirs.uniq.map { |path| path.sub(home.to_s, '~') }
   # redraw
 end
 
 def select_from_visited_files
   # not yet a unique list, needs to be unique and have latest pushed to top
-  $title = 'Visited Files'
+  @title = 'Visited Files'
   home = File.expand_path '~'
-  $files = $visited_files.uniq.map { |path| path.sub(home.to_s, '~') }
+  @files = @visited_files.uniq.map { |path| path.sub(home.to_s, '~') }
   # redraw
 end
 
 # maybe unused ??? XXX
 def select_bookmarks
-  $title = 'Bookmarks'
-  $files = $bookmarks.values
+  @title = 'Bookmarks'
+  @files = @bookmarks.values
 end
 
 ## part copied and changed from change_dir since we don't dir going back on top
 #  or we'll be stuck in a cycle
 def pop_dir
   # the first time we pop, we need to put the current on stack
-  $visited_dirs.push Dir.pwd unless $visited_dirs.index(Dir.pwd)
+  @visited_dirs.push Dir.pwd unless @visited_dirs.index(Dir.pwd)
   ## XXX make sure thre is something to pop
-  d = $visited_dirs.delete_at 0
+  d = @visited_dirs.delete_at 0
   ## XXX make sure the dir exists, cuold have been deleted. can be an error or crash otherwise
-  $visited_dirs.push d
+  @visited_dirs.push d
   Dir.chdir d
   post_cd
   rescan_required
@@ -1903,10 +1904,10 @@ end
 
 # after changing directory
 def post_cd
-  $title = $patt = $message = nil
-  $sta = $cursor = $stact = 0
-  $visual_block_start = nil
-  $current_dir = Dir.pwd
+  @title = @patt = @message = nil
+  @sta = @cursor = @stact = 0
+  @visual_block_start = nil
+  @current_dir = Dir.pwd
   screen_settings
 
   # goto last position cursor was in this dir
@@ -1919,10 +1920,10 @@ def config_read
   return unless File.readable? f
 
   hash = loadYML(f)
-  $used_dirs = hash['DIRS']
-  $visited_files = hash['FILES']
-  $bookmarks = hash['BOOKMARKS']
-  $used_dirs.concat get_env_paths
+  @used_dirs = hash['DIRS']
+  @visited_files = hash['FILES']
+  @bookmarks = hash['BOOKMARKS']
+  @used_dirs.concat get_env_paths
 end
 
 def get_env_paths
@@ -1944,12 +1945,12 @@ def config_write
   # Putting it in a format that zfm can also read and write
   f1 = File.expand_path(CONFIG_FILE)
   hash = {}
-  hash['DIRS'] = $used_dirs.select { |dir| File.exist? dir }
-  hash['FILES'] = $visited_files.select { |file| File.exist? file }
+  hash['DIRS'] = @used_dirs.select { |dir| File.exist? dir }
+  hash['FILES'] = @visited_files.select { |file| File.exist? file }
   # NOTE bookmarks is a hash and contains FILE:cursor_pos
-  hash['BOOKMARKS'] = $bookmarks # .select {|file| File.exist? file}
+  hash['BOOKMARKS'] = @bookmarks # .select {|file| File.exist? file}
   writeYML hash, f1
-  $writing = $modified = false
+  @writing = @modified = false
   message "Saved #{f1}"
 end
 
@@ -1957,13 +1958,13 @@ end
 require 'yaml'
 def loadYML filename
   hash = YAML.safe_load(File.open(filename))
-  warn hash.keys.size if $opt_debug
+  warn hash.keys.size if @opt_debug
   return hash
 end
 
 def writeYML obj, filename
   File.open(filename, 'w') { |f| f.write obj.to_yaml }
-  warn "Written to file #{filename}" if $opt_debug
+  warn "Written to file #{filename}" if @opt_debug
 end
 # }}}
 
@@ -1975,9 +1976,9 @@ def create_bookmark
   key = get_char
   # print "\e[?25l" # hide cursor
   if /^[0-9A-Za-z]$/.match?(key)
-    # $bookmarks[key] = "#{Dir.pwd}:#{$cursor}"
+    # @bookmarks[key] = "#{Dir.pwd}:#{@cursor}"
     set_bookmark key
-    $modified = true
+    @modified = true
     message "Created bookmark #{key} for #{File.basename(Dir.pwd)}."
   else
     perror 'Bookmark must be alpha character or number.'
@@ -1999,30 +2000,30 @@ def subcommand
   end
   if command == 'q'
     # FIXME: 2019-03-22 - should this not call quit_command ?
-    if $modified
+    if @modified
       last_line
       print 'Do you want to save bookmarks? (y/n): '
       key = get_char
       if key == 'y'
-        $writing = true
-        $quitting = true
+        @writing = true
+        @quitting = true
       elsif key == 'n'
-        $quitting = true
+        @quitting = true
         print 'Quitting without saving bookmarks'
       else
         perror 'No action taken.'
       end
     else
-      $quitting = true
+      @quitting = true
     end
   elsif command == 'wq'
-    $quitting = true
-    $writing = true
+    @quitting = true
+    @writing = true
   elsif command == 'w'
     config_write
   elsif command == 'x'
-    $quitting = true
-    $writing = true if $modified
+    @quitting = true
+    @writing = true if @modified
   elsif command == 'e'
     edit_current
   elsif command == 'o'
@@ -2039,36 +2040,36 @@ def subcommand
 end
 
 def quit_command
-  if $modified
+  if @modified
     last_line
-    puts 'Press y to save bookmarks before quitting ' if $modified
+    puts 'Press y to save bookmarks before quitting ' if @modified
     print 'Press n to quit without saving'
     key = get_char
   else
-    $quitting = true
+    @quitting = true
   end
-  $quitting = true if key == 'n'
-  $quitting = $writing = true if key == 'y'
+  @quitting = true if key == 'n'
+  @quitting = @writing = true if key == 'y'
 end
 
 def views
   views = %w[/ om oa Om OL oL On on]
   viewlabels = %w[Dirs Newest Accessed Oldest Largest Smallest Reverse Name]
-  $sorto = views[$viewctr]
-  $title = viewlabels[$viewctr]
-  $viewctr += 1
-  $viewctr = 0 if $viewctr > views.size
+  @sorto = views[@viewctr]
+  @title = viewlabels[@viewctr]
+  @viewctr += 1
+  @viewctr = 0 if @viewctr > views.size
 
-  $files = `zsh -c 'print -rl -- *(#{$sorto}#{$hidden}M)'`.split("\n")
+  @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}M)'`.split("\n")
   # redraw
 end
 
 def child_dirs
-  $title = 'Directories in current directory'
+  @title = 'Directories in current directory'
   # M is MARK_DIRS option for putting trailing slash after dir
-  # $files = `zsh -c 'print -rl -- *(/#{$sorto}#{$hidden}M)'`.split("\n")
-  $files = dirs
-  message "#{$files.size} directories."
+  # @files = `zsh -c 'print -rl -- *(/#{@sorto}#{@hidden}M)'`.split("\n")
+  @files = dirs
+  message "#{@files.size} directories."
   # redraw
 end
 
@@ -2085,12 +2086,12 @@ def add_slash files
 end
 
 def dirtree
-  $title = 'Child directories recursive'
+  @title = 'Child directories recursive'
   # zsh **/ is recursive
-  files1 = `zsh -c 'print -rl -- **/*(/#{$sorto}#{$hidden}M)'`.split("\n")
-  $files = Dir['**/']
-  @log.debug "zsh #{files1} != rb #{$files}" if files1 != $files
-  message "#{$files.size} files."
+  files1 = `zsh -c 'print -rl -- **/*(/#{@sorto}#{@hidden}M)'`.split("\n")
+  @files = Dir['**/']
+  @log.debug "zsh #{files1} != rb #{@files}" if files1 != @files
+  message "#{@files.size} files."
   # redraw
 end
 
@@ -2099,10 +2100,10 @@ end
 # structure than files.
 def tree
   # Caution: use only for small projects, don't use in root.
-  $title = 'Full Tree'
-  # $files = `zsh -c 'print -rl -- **/*(#{$sorto}#{$hidden}M)'`.split("\n")
-  $files = Dir['**/*']
-  message "#{$files.size} files."
+  @title = 'Full Tree'
+  # @files = `zsh -c 'print -rl -- **/*(#{@sorto}#{@hidden}M)'`.split("\n")
+  @files = Dir['**/*']
+  message "#{@files.size} files."
   # redraw
 end
 
@@ -2110,26 +2111,26 @@ end
 # In some cases it shows mostly .git files, we need to prune those
 def recent_files
   # print -rl -- **/*(Dom[1,10])
-  $title = 'Recent files'
+  @title = 'Recent files'
   # zsh D DOT_GLOB, show dot files
   # zsh om order on modification time
-  $files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n").reject { |f| f[0] == '.' }
+  @files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n").reject { |f| f[0] == '.' }
   # redraw
 end
 
 def select_current
-  ## vp is local there, so i can do $vp[0]
-  # open_file $view[$sta] if $view[$sta]
-  open_file $view[$cursor] if $view[$cursor]
+  ## vp is local there, so i can do @vp[0]
+  # open_file @view[@sta] if @view[@sta]
+  open_file @view[@cursor] if @view[@cursor]
 end
 
 ## create a list of dirs in which some action has happened, for saving
 def push_used_dirs d=Dir.pwd
-  # $used_dirs.index(d) || $used_dirs.push(d)
-  return if $used_dirs[0] == d
+  # @used_dirs.index(d) || @used_dirs.push(d)
+  return if @used_dirs[0] == d
 
-  $used_dirs.delete(d) if $used_dirs.index(d)
-  $used_dirs.insert(0, d)
+  @used_dirs.delete(d) if @used_dirs.index(d)
+  @used_dirs.insert(0, d)
 end
 
 def pbold text
@@ -2156,18 +2157,18 @@ def get_shortcut index
   # Case where user has panned to the right columns:
   # Earlier, we showed '<' in left columns, if user has panned right.
   # Now we show unused shortcuts after exhausting them.
-  # return '<' if index < $stact
-  if index < $stact
-    index = $viewport.size - $stact + index
-    i = $IDX[index]
+  # return '<' if index < @stact
+  if index < @stact
+    index = @viewport.size - @stact + index
+    i = IDX[index]
     return i if i
 
     return '['
   end
 
   # Normal case (user has not panned columns)
-  index -= $stact
-  i = $IDX[index]
+  index -= @stact
+  i = IDX[index]
   return i if i
 
   '->'
@@ -2191,8 +2192,8 @@ def get_index key, vsz=999
       i = convert_key_to_index("#{key}#{zch}")
       # @log.debug "convert returned #{i} for #{key}#{zch}"
       return i if i
-      # i = $IDX.index
-      # return i + $stact if i
+      # i = IDX.index
+      # return i + @stact if i
     end
   end
   nil
@@ -2202,25 +2203,25 @@ end
 # Earlier this was simple, but now that we put hints/shortcuts
 #  in rows on the left after panning, we need to account for cycled hints.
 def convert_key_to_index key
-  i = $IDX.index(key)
+  i = IDX.index(key)
   if i
-    # @log.debug "get_index with #{key}: #{i}. #{$stact}. #{$viewport.size}"
-    vps = $viewport.size
+    # @log.debug "get_index with #{key}: #{i}. #{@stact}. #{@viewport.size}"
+    vps = @viewport.size
     # TODO: if very high key given, consider going to last file ?
     #  that way one can press zz or ZZ to go to last file.
     # 2019-04-11 - XXX actually this doesnt place the cursor on last file
     #  it opens it, which may not be what we want
     retnil = nil # vps - 1 # nil
-    return retnil if $stact == 0 && i + $stact >= vps
-    # return nil if $stact > 0 && i + $stact >= vps && i + $stact - vps >= $stact
-    return retnil if $stact > 0 && i + $stact >= vps && i - vps >= 0
+    return retnil if @stact == 0 && i + @stact >= vps
+    # return nil if @stact > 0 && i + @stact >= vps && i + @stact - vps >= @stact
+    return retnil if @stact > 0 && i + @stact >= vps && i - vps >= 0
 
-    if i + $stact >= vps
+    if i + @stact >= vps
       # panning case, hints are recycled
-      return (i + $stact) - vps
+      return (i + @stact) - vps
     else
       # regular hint
-      return i + $stact # if i
+      return i + @stact # if i
     end
   end
   nil
@@ -2233,7 +2234,7 @@ end
 def move_instant
   # FIXME: cannot be in target directory and do auto update
 
-  if $selected_files.empty?
+  if @selected_files.empty?
     target = readline "Enter target directory for moving files (#{@move_target}):"
     return unless target
     return if target == '' && @move_target.nil?
@@ -2276,7 +2277,7 @@ def move_instant
     return
   end
 
-  files = $selected_files
+  files = @selected_files
   # TODO: shellwords
   ccount = 0
   files.each do |f|
@@ -2302,8 +2303,8 @@ end
 def command_file prompt, *command
   pauseyn = command.shift
   command = command.join ' '
-  print "[#{prompt}] Choose a file [#{$view[$cursor]}]: "
-  file = ask_hint $view[$cursor]
+  print "[#{prompt}] Choose a file [#{@view[@cursor]}]: "
+  file = ask_hint @view[@cursor]
   # print "#{prompt} :: Enter file shortcut: "
   # file = ask_hint
   perror 'Command Cancelled' unless file
@@ -2329,8 +2330,8 @@ def ask_hint deflt=nil
   key = get_char
   return deflt if key == 'ENTER'
 
-  ix = get_index(key, $viewport.size)
-  f = $viewport[ix] if ix
+  ix = get_index(key, @viewport.size)
+  f = @viewport[ix] if ix
   f
 end
 
@@ -2338,13 +2339,13 @@ end
 # NOTE: tput is ncurses dependent, so use stty
 #
 def screen_settings
-  $glines, $gcols = `stty size`.split.map(&:to_i)
-  # $glines = `tput lines`.to_i
-  # $gcols = `tput cols`.to_i
-  $grows = $glines - 3
-  # $pagesize = 60
-  # $gviscols = 3
-  $pagesize = $grows * $gviscols
+  @glines, @gcols = `stty size`.split.map(&:to_i)
+  # @glines = `tput lines`.to_i
+  # @gcols = `tput cols`.to_i
+  @grows = @glines - 3
+  # @pagesize = 60
+  # @gviscols = 3
+  @pagesize = @grows * @gviscols
 end
 
 ## Tabs to next column in multi-column displays.
@@ -2356,24 +2357,24 @@ def column_next direction=0
   # right movement or panning cycles back to first column
   # leftward movement stops at first column.
   if direction == 0
-    $stact += $grows
-    $stact = 0 if $stact >= $viewport.size
-    $cursor += $grows
+    @stact += @grows
+    @stact = 0 if @stact >= @viewport.size
+    @cursor += @grows
     # 2019-03-18 - zero loses offset. we need to maintain it
-    # $cursor = 0 if $cursor >= $viewport.size
-    if $cursor - $sta >= $viewport.size
-      $cursor -= $grows while $cursor > $sta
-      $stact -= $grows while $stact > 0
-      $cursor += $grows if $cursor < $sta
-      $stact  += $grows if $stact < 0
+    # @cursor = 0 if @cursor >= @viewport.size
+    if @cursor - @sta >= @viewport.size
+      @cursor -= @grows while @cursor > @sta
+      @stact -= @grows while @stact > 0
+      @cursor += @grows if @cursor < @sta
+      @stact  += @grows if @stact < 0
     end
   else
-    $stact -= $grows
-    $cursor -= $grows
-    $stact = 0 if $stact < 0
+    @stact -= @grows
+    @cursor -= @grows
+    @stact = 0 if @stact < 0
     # setting cursor as zero loses the position or offset
     # We are trying to maintain offset
-    $cursor += $grows if $cursor < 0
+    @cursor += @grows if @cursor < 0
   end
   # redraw
 end
@@ -2644,7 +2645,7 @@ end
 # remove non-existent files from select list due to move or delete
 #  or rename or whatever
 def clean_selected_files
-  $selected_files.select! { |x| x = File.expand_path(x); File.exist?(x) }
+  @selected_files.select! { |x| x = File.expand_path(x); File.exist?(x) }
 end
 
 # set the default target for further moves
@@ -2659,10 +2660,10 @@ end
 
 # increase or decrease column
 def columns_incdec howmany
-  $gviscols += howmany.to_i
-  $gviscols = 1 if $gviscols < 1
-  $gviscols = 6 if $gviscols > 6
-  $pagesize = $grows * $gviscols
+  @gviscols += howmany.to_i
+  @gviscols = 1 if @gviscols < 1
+  @gviscols = 6 if @gviscols > 6
+  @pagesize = @grows * @gviscols
 end
 
 # bind a key to an external command wich can be then be used for files
@@ -2683,7 +2684,7 @@ def bindkey_ext_command
     end
     print 'Pause after output [y/n]: '
     yn = get_char
-    $bindings[key] = "command_file #{pro} #{yn} #{com}"
+    @bindings[key] = "command_file #{pro} #{yn} #{com}"
   end
 end
 
@@ -2696,7 +2697,7 @@ def ag
   pattern = readline 'Enter a pattern to search (ag): '
   return if pattern == ''
 
-  $title = "Files found using 'ag -t: ' #{pattern}"
+  @title = "Files found using 'ag -t: ' #{pattern}"
 
   ## ag options :
   #     -t : all text files
@@ -2708,10 +2709,10 @@ def ag
   files = `ag -lt "#{pattern}"`.split("\n")
   if files.empty?
     perror "No files found for #{pattern}."
-    $title = nil
+    @title = nil
     return
   end
-  $files = files
+  @files = files
   # redraw
 end
 
@@ -2721,12 +2722,12 @@ def ffind
   pattern = readline '! find . -iname :'
   return if pattern == ''
 
-  $title = "Files found using 'find' #{pattern}"
+  @title = "Files found using 'find' #{pattern}"
   files = `find . -iname "#{pattern}"`.split("\n")
   if files.empty?
     perror 'No files found. Try adding *'
   else
-    $files = files
+    @files = files
   end
   # redraw
 end
@@ -2736,13 +2737,13 @@ def locate
   pattern = readline
   return if pattern == ''
 
-  $title = "Files found using 'locate' #{pattern}"
+  @title = "Files found using 'locate' #{pattern}"
   files = `locate #{pattern}`.split("\n")
   files.select! { |x| x = File.expand_path(x); File.exist?(x) }
   if files.empty?
     perror 'No files found.'
   else
-    $files = files
+    @files = files
   end
   # redraw
 end
@@ -2754,11 +2755,11 @@ def z_interface
   file = File.expand_path('~/.z')
   return unless File.exist? file
 
-  $title = 'Directories from ~/.z'
-  $files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
+  @title = 'Directories from ~/.z'
+  @files = `sort -rn -k2 -t '|' ~/.z | cut -f1 -d '|'`.split("\n")
   home = ENV['HOME']
   # shorten file names
-  $files.collect! do |f|
+  @files.collect! do |f|
     f.sub(/#{home}/, '~')
   end
   # redraw
@@ -2785,70 +2786,70 @@ end
 # move cursor down a line
 def cursor_dn
   @movement = :down
-  @old_cursor = $cursor
+  @old_cursor = @cursor
   moveto(pos + 1)
 end
 
 def cursor_up
-  @old_cursor = $cursor
+  @old_cursor = @cursor
   @movement = :up
   moveto(pos - 1)
 end
 
 # return cursor position
 def pos
-  $cursor
+  @cursor
 end
 
 # move cursor to given position/line
 def moveto position
-  orig = $cursor
-  $cursor = position
-  $cursor = [$cursor, $view.size - 1].min
-  $cursor = [$cursor, 0].max
+  orig = @cursor
+  @cursor = position
+  @cursor = [@cursor, @view.size - 1].min
+  @cursor = [@cursor, 0].max
 
   # try to stop it from landing on separator
   if current_file == SEPARATOR
-    $cursor += 1 if @movement == :down
-    $cursor -= 1 if @movement == :up
+    @cursor += 1 if @movement == :down
+    @cursor -= 1 if @movement == :up
     return
   end
 
   # 2019-03-18 - adding sta
-  # $sta = position - only when page flips and file not visible
+  # @sta = position - only when page flips and file not visible
   # FIXME not correct, it must stop at end or correctly cycle
   # sta goes to 0 but cursor remains at 70
   # viewport.size may be wrong here, maybe should be pagesize only
-  oldsta = $sta
-  if $cursor - $sta >= $pagesize
-    $sta += $pagesize
-    # elsif $sta - $cursor >= $viewport.size
+  oldsta = @sta
+  if @cursor - @sta >= @pagesize
+    @sta += @pagesize
+    # elsif @sta - @cursor >= @viewport.size
   end
-  if $sta > $cursor
-    $sta -= $pagesize
-    # $sta = $cursor
+  if @sta > @cursor
+    @sta -= @pagesize
+    # @sta = @cursor
   end
 
-  @movement = nil if oldsta != $sta # we need to redraw
+  @movement = nil if oldsta != @sta # we need to redraw
 
-  star = [orig, $cursor].min
-  fin = [orig, $cursor].max
-  return unless $visual_mode
+  star = [orig, @cursor].min
+  fin = [orig, @cursor].max
+  return unless @visual_mode
 
   @movement = nil # visual mode needs to redraw page
 
   # PWD has to be there in selction
   if selected? current_file
     # this depends on the direction
-    # $selected_files = $selected_files - $view[star..fin]
-    remove_from_selection $view[star..fin]
+    # @selected_files = @selected_files - @view[star..fin]
+    remove_from_selection @view[star..fin]
     ## current row remains in selection always.
     add_to_selection current_file
   else
-    # $selected_files.concat $view[star..fin]
-    add_to_selection $view[star..fin]
+    # @selected_files.concat @view[star..fin]
+    add_to_selection @view[star..fin]
   end
-  message "#{$selected_files.count} files selected.   "
+  message "#{@selected_files.count} files selected.   "
   # ensure
   # redraw
 end
@@ -2856,18 +2857,18 @@ end
 
 # is given file in selected array
 def visited? file
-  $current_dir ||= Dir.pwd
-  file = File.join($current_dir, file)
-  return $visited_files.index file
+  @current_dir ||= Dir.pwd
+  file = File.join(@current_dir, file)
+  return @visited_files.index file
 end
 
 # ------------- selection related methods --------------------------------#
 
 # is given file in selected array
 def selected? file
-  $current_dir ||= Dir.pwd
-  file = File.join($current_dir, file)
-  return $selected_files.index file
+  @current_dir ||= Dir.pwd
+  file = File.join(@current_dir, file)
+  return @selected_files.index file
 end
 
 # add given file/s to selected file list
@@ -2877,10 +2878,10 @@ def add_to_selection file
   when String
     ff = [file]
   end
-  $current_dir ||= Dir.pwd
+  @current_dir ||= Dir.pwd
   ff.each do |f|
-    full = File.join($current_dir, f)
-    $selected_files.push(full) unless $selected_files.include?(full)
+    full = File.join(@current_dir, f)
+    @selected_files.push(full) unless @selected_files.include?(full)
   end
 end
 
@@ -2890,35 +2891,35 @@ def remove_from_selection file
   when String
     ff = [file]
   end
-  $current_dir ||= Dir.pwd
+  @current_dir ||= Dir.pwd
   ff.each do |f|
-    full = File.join($current_dir, f)
-    $selected_files.delete full
+    full = File.join(@current_dir, f)
+    @selected_files.delete full
   end
 end
 
 # ------------- visual mode methods --------------------------------#
 def visual_mode_toggle
-  $mode = nil
-  $visual_mode = !$visual_mode
-  if $visual_mode
-    $mode = 'VIS'
-    $visual_block_start = $cursor
+  @mode = nil
+  @visual_mode = !@visual_mode
+  if @visual_mode
+    @mode = 'VIS'
+    @visual_block_start = @cursor
     add_to_selection current_file
   end
-  message "Visual mode is #{$visual_mode}."
+  message "Visual mode is #{@visual_mode}."
 end
 
 # Called from Escape key only. Clears selection.
 def visual_block_clear
-  if $visual_block_start
-    star = [$visual_block_start, $cursor].min
-    fin = [$visual_block_start, $cursor].max
-    remove_from_selection $view[star..fin]
+  if @visual_block_start
+    star = [@visual_block_start, @cursor].min
+    fin = [@visual_block_start, @cursor].max
+    remove_from_selection @view[star..fin]
   end
-  $visual_block_start = nil
-  $visual_mode = nil
-  $mode = nil if $mode == 'VIS'
+  @visual_block_start = nil
+  @visual_mode = nil
+  @mode = nil if @mode == 'VIS'
 end
 
 # ------------- file matching methods --------------------------------#
@@ -2940,11 +2941,11 @@ end
 def return_next_match binding, *args
   first = nil
   ix = 0
-  $view.each_with_index do |elem, ii|
+  @view.each_with_index do |elem, ii|
     next unless binding.call(elem, *args)
 
     first ||= ii
-    if ii > $cursor
+    if ii > @cursor
       ix = ii
       break
     end
@@ -2958,10 +2959,10 @@ end
 # position cursor on a specific line which could be on a nother page
 # therefore calculate the correct start offset of the display also.
 def goto_line pos
-  pages = ((pos * 1.00) / $pagesize).ceil
+  pages = ((pos * 1.00) / @pagesize).ceil
   pages -= 1
-  $sta = pages * $pagesize + 1
-  $cursor = pos
+  @sta = pages * @pagesize + 1
+  @cursor = pos
 end
 
 # return filetype of file using `file` external command.
@@ -2983,10 +2984,10 @@ end
 
 def opener_for f
   # by default, default command is nil. Changed in toggle_pager_mode
-  $default_command ||= '$PAGER'
+  @default_command ||= '$PAGER'
   # by default mode, is false, changed in toggle_pager_mode
   # Get filetype, and check for command for type, else extn else unknown
-  if !$editor_mode
+  if !@editor_mode
     ft = filetype f
     comm = PAGER_COMMAND[ft] if ft
     comm ||= PAGER_COMMAND[File.extname(f)]
@@ -2996,30 +2997,30 @@ def opener_for f
     # opens everything? what of images etc
     # TODO use editor only for text, otherwise use filetype or another hash
     # like editor_command
-    comm = $default_command
+    comm = @default_command
   end
-  comm ||= $default_command
+  comm ||= @default_command
   comm
 end
 
 # save offset in directory so we can revert to it when we return
 def save_dir_pos
   # the next line meant that it would not save first directory.
-  # return if $sta == 0 && $cursor == 0
+  # return if @sta == 0 && @cursor == 0
 
-  $dir_position[Dir.pwd] = [$sta, $cursor]
+  @dir_position[Dir.pwd] = [@sta, @cursor]
 end
 
 # revert to the position we were at in this directory
 def revert_dir_pos
-  $sta = 0
-  $cursor = 0
-  a = $dir_position[Dir.pwd]
+  @sta = 0
+  @cursor = 0
+  a = @dir_position[Dir.pwd]
   if a
-    $sta = a.first
-    $cursor = a[1]
-    raise "sta is nil for #{Dir.pwd} : #{$dir_position[Dir.pwd]}" unless $sta
-    raise 'cursor is nil' unless $cursor
+    @sta = a.first
+    @cursor = a[1]
+    raise "sta is nil for #{Dir.pwd} : #{@dir_position[Dir.pwd]}" unless @sta
+    raise 'cursor is nil' unless @cursor
   end
 end
 
@@ -3033,7 +3034,7 @@ def create_a_dir
   end
   begin
     FileUtils.mkdir str
-    $used_dirs.insert(0, str) if File.exist?(str)
+    @used_dirs.insert(0, str) if File.exist?(str)
     refresh
   rescue StandardError => ex
     perror "Error in newdir: #{ex}"
@@ -3046,17 +3047,17 @@ def create_a_file
 
   system %($EDITOR "#{str}")
   setup_terminal
-  $visited_files.insert(0, str) if File.exist?(str)
+  @visited_files.insert(0, str) if File.exist?(str)
   refresh
 end
 
 # convenience method to return file under cursor
 def current_file
-  $view[$cursor]
+  @view[@cursor]
 end
 
 def current_or_selected_files
-  return $selected_files unless $selected_files.empty?
+  return @selected_files unless @selected_files.empty?
 
   return [current_file]
 end
@@ -3104,8 +3105,8 @@ def generators
   return if binding.nil? || binding == ''
 
   # call generator and accept list of files
-  $title = "Files from #{File.basename(binding)}"
-  $files = `#{binding} "#{current_file}"`.split("\n")
+  @title = "Files from #{File.basename(binding)}"
+  @files = `#{binding} "#{current_file}"`.split("\n")
 end
 # ------------- end of scripts --------------------------------#
 
@@ -3134,7 +3135,7 @@ def write_selected_files
   fname = File.expand_path(fname)
 
   # remove file if no selection
-  if $selected_files.empty?
+  if @selected_files.empty?
     File.unlink(fname) if File.exist?(fname)
     return nil
   end
@@ -3143,7 +3144,7 @@ def write_selected_files
   # TODO: what if unix commands need escaped files ?
   base = Pathname.new Dir.pwd
   File.open(fname, 'w') do |file|
-    $selected_files.each do |row|
+    @selected_files.each do |row|
       # use relative filename. Otherwise things like zip and tar run into issues
       unless @selected_files_fullpath_flag
         p = Pathname.new(row)
@@ -3162,18 +3163,18 @@ end
 # remove current entry from used dirs list, since we may not want some entries being there
 #
 def remove_from_list
-  unless $selected_files.empty?
-    sz = $selected_files.size
+  unless @selected_files.empty?
+    sz = @selected_files.size
     print "Remove #{sz} files from used list (y)?: "
     key = get_char
     return if key != 'y'
 
-    arr = $selected_files.map { |path| File.expand_path(path) }
+    arr = @selected_files.map { |path| File.expand_path(path) }
 
-    $used_dirs = $used_dirs - arr
-    $visited_files = $visited_files - arr
+    @used_dirs = @used_dirs - arr
+    @visited_files = @visited_files - arr
     unselect_all
-    $modified = true
+    @modified = true
     refresh
     return
   end
@@ -3181,19 +3182,19 @@ def remove_from_list
   # no file selected, use file under cursor
   print
   ## what if selected some rows
-  file = $view[$cursor]
+  file = @view[@cursor]
   print "Remove #{file} from used list (y)?: "
   key = get_char
   return if key != 'y'
 
   file = File.expand_path(file)
   if File.directory? file
-    $used_dirs.delete(file)
+    @used_dirs.delete(file)
   else
-    $visited_files.delete(file)
+    @visited_files.delete(file)
   end
   refresh
-  $modified = true
+  @modified = true
 end
 
 #
@@ -3203,10 +3204,10 @@ end
 # latest source, but in some cases even this can be misleading since running a program accesses
 # include files.
 def enhance_file_list
-  return unless $enhanced_mode
+  return unless @enhanced_mode
 
   begin
-    actr = $files.size
+    actr = @files.size
 
     # zshglob: M = MARK_DIRS with slash
     # zshglob: N = NULL_GLOB no error if no result, this is causing space to split
@@ -3215,16 +3216,16 @@ def enhance_file_list
     # FIXME: append only if we are adding.
     # FIXME: this makes it possible to select this row,
     # FIXME: and count it as a file !!
-    # $files.append SEPARATOR
+    # @files.append SEPARATOR
 
     # if only one entry and its a dir
     # get its children and maybe the recent mod files a few
     # FIXME: simplify condition into one
-    if $files.size == 1
+    if @files.size == 1
       # its a dir, let give the next level at least
-      return unless $files.first[-1] == '/'
+      return unless @files.first[-1] == '/'
 
-      d = $files.first
+      d = @files.first
       # zshglob: 'om' = ordered on modification time
       # f1 = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
       f = get_files_by_mtime(d)
@@ -3235,8 +3236,8 @@ def enhance_file_list
       # TODO: use ruby this throws errors if not files
       if f && !f.empty?
         # @log.debug "CONCAT: #{f}" if @debug_flag
-        $files.concat f
-        $files.concat get_important_files(d)
+        @files.concat f
+        @files.concat get_important_files(d)
       end
       return
     end
@@ -3244,11 +3245,11 @@ def enhance_file_list
     # check if a ruby project dir, although it could be a backup file too,
     # if so , expand lib and maybe bin, put a couple recent files
     # FIXME: gemspec file will be same as current folder
-    if $files.index('Gemfile') || !$files.grep(/\.gemspec/).empty?
+    if @files.index('Gemfile') || !@files.grep(/\.gemspec/).empty?
       # usually the lib dir has only one file and one dir
       flg = false
-      $files.concat get_important_files(Dir.pwd)
-      if $files.index('lib/')
+      @files.concat get_important_files(Dir.pwd)
+      if @files.index('lib/')
         # get first five entries by modification time
         # f1 = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
         f = get_files_by_mtime('lib')&.first(5)
@@ -3272,7 +3273,7 @@ def enhance_file_list
       end
 
       # look into bin directory and get first five modified files
-      if $files.index('bin/')
+      if @files.index('bin/')
         # f1 = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
         f = get_files_by_mtime('bin')&.first(5)
         # @log.warn "2768 f1 #{f1} != #{f} in bin/" if f1 != f
@@ -3284,7 +3285,7 @@ def enhance_file_list
       # lib has a dir in it with the gem name
 
     end
-    return if $files.size > 15
+    return if @files.size > 15
 
     # Get most recently accessed directory
     ## NOTE: first check accessed else modified will change accessed
@@ -3346,14 +3347,14 @@ def enhance_file_list
     end
   ensure
     # if any files were added, then add a separator
-    bctr = $files.size
-    $files.insert actr, SEPARATOR if actr < bctr
+    bctr = @files.size
+    @files.insert actr, SEPARATOR if actr < bctr
   end
 end
 
-# insert important files to end of $files
+# insert important files to end of @files
 def insert_into_list _dir, file
-  $files.push(*file)
+  @files.push(*file)
 end
 
 # Get visited files and bookmarks that are inside this directory
@@ -3369,14 +3370,14 @@ def get_important_files dir
 
   # 2019-03-23 - i think we are getting the basename of the file
   #  if it is present in the given directory XXX
-  $visited_files.each do |e|
+  @visited_files.each do |e|
     list << e[l..-1] if e.index(dir) == 0
   end
 
   # bookmarks if it starts with this directory then add it
   # FIXME it puts same directory cetus into the list with full path
   # We need to remove the base until this dir. get relative part
-  list1 = $bookmarks.values.select do |e|
+  list1 = @bookmarks.values.select do |e|
     e.index(dir) == 0 && e != dir
   end
 
@@ -3442,14 +3443,14 @@ end
 # set message which will be displayed in status line
 # TODO: maybe we should pad it 2019-04-08 -
 def message mess
-  $message = mess
+  @message = mess
   @keys_to_clear = 2 if mess
 end
 
 def last_line
-  # system "tput cup #{$glines} 0"
-  # print "\e[#{$glines};0H"
-  tput_cup $glines, 0
+  # system "tput cup #{@glines} 0"
+  # print "\e[#{@glines};0H"
+  tput_cup @glines, 0
 end
 
 def clear_last_line
@@ -3459,7 +3460,7 @@ def clear_last_line
   # %*s        - set blank spaces for entire line
   # \e[m       - reset text mode
   # \r         - bring to start of line since callers will print.
-  print format("\e[33;4%sm%*s\e[m\r", @status_color || '1', $gcols, ' ')
+  print format("\e[33;4%sm%*s\e[m\r", @status_color || '1', @gcols, ' ')
 end
 
 # print right aligned
@@ -3468,12 +3469,12 @@ end
 # should clear and reprint mode, message, patt and right text
 def print_on_right text
   sz = text.size
-  col = $gcols - sz - 1
+  col = @gcols - sz - 1
   col = 2 if col < 2
-  text = text[0..$gcols - 3] if sz > $gcols - 2
-  # system "tput cup #{$glines} #{$gcols - sz - 1}"
-  system "tput cup #{$glines} #{col}"
-  # tput_cup $glines, $gcols - sz - 1
+  text = text[0..@gcols - 3] if sz > @gcols - 2
+  # system "tput cup #{@glines} #{@gcols - sz - 1}"
+  system "tput cup #{@glines} #{col}"
+  # tput_cup @glines, @gcols - sz - 1
   # print text
   print "\e[33;4#{@status_color_right}m#{text}\e[m"
 end
@@ -3502,7 +3503,7 @@ def only_cursor_moved?
 
   # if cursor has not moved (first or last item on screen)
   # keep testing this out 2019-04-14 -
-  if @old_cursor == $cursor
+  if @old_cursor == @cursor
     @movement = false
     return true # next in the loop
   end
@@ -3536,8 +3537,8 @@ def run
   place_cursor
 
   # do we need this, have they changed after redraw
-  $patt = nil
-  $sta = 0
+  @patt = nil
+  @sta = 0
 
   # forever loop that prints dir and takes a key
   loop do
@@ -3553,11 +3554,11 @@ def run
     redraw rescan?
     place_cursor
 
-    break if $quitting
+    break if @quitting
   end
   write_curdir
   puts 'bye'
-  config_write if $writing
+  config_write if @writing
   @log&.close
 end
 
