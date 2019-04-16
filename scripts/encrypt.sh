@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # This zips selected files with a password
+# if no files selected, then file under cursor is zipped
 FILE=~/tmp/selected_files
 TODAY=$(date +"%Y%m%d%H%M")
 TARGET=enc_${TODAY}.zip
