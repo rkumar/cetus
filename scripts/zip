@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # This script zips the contents of selected_files
 # It prompts for a file name to create, and defaults to archive.zip
+# If no files were selected, then current file under cursor is zipped.
 
 FILE=~/tmp/selected_files
 TODAY=$(date +"%Y%m%d%H%M")
