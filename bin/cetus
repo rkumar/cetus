@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-15 09:04
+#  Last update: 2019-04-16 09:44
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -28,15 +28,15 @@ require 'shellwords'
 # https://docs.ruby-lang.org/en/2.6.0/FileUtils.html
 require 'fileutils'
 require 'logger'
-# @log = Logger.new(File.expand_path '~/tmp/log.txt')
-@log = Logger.new('log.txt')
+@log = Logger.new(File.expand_path('~/tmp/log.txt'))
+# @log = Logger.new('log.txt')
 
 ## INSTALLATION
 # copy into PATH
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.36.0'
+VERSION = '0.1.37.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -52,7 +52,7 @@ CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
       'C-s' => 'toggle_select',
       'C-r' => 'reduce',
       'C-g' => 'debug_vars',
-        '*' => 'toggle_selection_mode',
+        '*' => 'toggle_multiple_selection',
       'M-a' => 'select_all',
       'M-A' => 'unselect_all',
         '!' => 'execute',
@@ -67,6 +67,10 @@ CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
         '/' => 'enter_regex',
       'M-p' => 'prev_page',
       'M-n' => 'next_page',
+     'PgUp' => 'prev_page',
+     'PgDn' => 'next_page',
+     'Home' => 'goto_top',
+      'End' => 'goto_end',
     'SPACE' => 'next_page:Page Down',
       'M-f' => 'select_from_visited_files',
       'M-d' => 'select_from_used_dirs',
@@ -311,7 +315,7 @@ PAGER_COMMAND = {
 }.freeze
 @dir_position = {}
 @movement = @old_cursor = nil # cursor movement has happened only, don't repaint
-@selection_mode = 1 # single select
+@multiple_selection = true # single select
 ## FLAGS
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
@@ -569,7 +573,7 @@ def status_line
   # move to beginning of line, reset text mode after printing
   # patt and message are together, no gap, why not ? 2019-04-08 -
   if @patt && @patt != ''
-    patt = "[/#{@patt}]"
+    patt = "[/#{@patt}" + ']' # to get unfrozen string
     patt[-1] = '/i]' if @ignorecase
   end
   # bring cursor to start of line
@@ -594,7 +598,7 @@ def print_filename_status_line cf=current_file
          end
 
     mtime = if !File.exist? ff
-              # take care of dead links lstat TODO
+              # take care of dead links lstat
               date_format(File.lstat(ff).mtime) if File.symlink?(ff)
             else
               date_format(File.stat(ff).mtime)
@@ -740,6 +744,7 @@ def resolve_binding key
     send(binding, *args) if binding
   else
     # perror "No binding for #{key}"
+    @log.debug "No binding for #{key}"
   end
 end
 
@@ -1120,12 +1125,18 @@ def toggle_select f=current_file
   if selected? f
     remove_from_selection f
   else
-    @selected_files.clear if @selection_mode == 1
+    @selected_files.clear unless @multiple_selection
     add_to_selection f
   end
   message "#{@selected_files.count} files selected.   "
   # XXX is it possible to just redraw this line
   redraw_required
+end
+
+# allow single or multiple selection with C-s key
+def toggle_multiple_selection
+  @multiple_selection = !@multiple_selection
+  message "multiple_selection set to #{@multiple_selection}."
 end
 
 ## open file or directory
@@ -1146,7 +1157,6 @@ def open_file f
     save_dir_pos
     change_dir f # , nextpos
   elsif File.readable? f
-    # TODO: looks complex pls simplify !! XXX
     comm = opener_for f
     # '%%' will be substituted with the filename. See zip
     comm = if comm.index('%%')
@@ -1309,6 +1319,7 @@ end
 def select_all
   dir = Dir.pwd
   @selected_files = @view.map { |file| File.join(dir, file) }
+  message "#{@selected_files.count} files selected."
 end
 
 ## accept dir to goto and change to that ( can be a file too)
@@ -1352,12 +1363,12 @@ end
 #
 def toggle_selection_mode
   if @mode == 'SEL'
-    @selection_mode = 1
+    # @multiple_selection = 1
     unselect_all
     @mode = nil
     message 'Selection mode is single.   '
   else
-    @selection_mode = 2
+    # @multiple_selection = 2
     @mode = 'SEL'
     message 'Typing a hint selects the file. Typing again will clear   .  '
   end
@@ -1425,6 +1436,18 @@ def prev_page
   @old_cursor = nil
   # FIXME: check cursor sanity and if not changed then no redraw
   redraw_required
+end
+
+def goto_top
+  @sta = @cursor = 0
+  @old_cursor = nil
+end
+
+# goto end / bottom
+def goto_end
+  @cursor = @view.size - 1
+  @sta = @view.size - @pagesize
+  @old_cursor = nil
 end
 
 def print_help
@@ -1537,8 +1560,9 @@ def selection_menu
      :a => :select_all,
      :u => :unselect_all,
      :s => :toggle_select,
-    '*' => 'toggle_selection_mode',
+    '*' => 'toggle_multiple_selection',
     'x' => 'visual_mode_toggle',
+    'm' => 'toggle_selection_mode',
      :v => :view_selected_files
   }
   menu 'Selection Menu', h
@@ -1595,8 +1619,9 @@ def toggle_menu
         d: :toggle_group_dirs,
         :p => :toggle_pager_mode,
         :D => :toggle_debug_flag,
-        '8' => :toggle_selection_mode,
-        '*' => :toggle_selection_mode,
+        '8' => :toggle_multiple_selection,
+        '*' => :toggle_multiple_selection,
+        'S' => :toggle_selection_mode,
         v: :visual_mode_toggle,
         t: :toggle_truncate_from,
         e: :toggle_enhanced_list }
@@ -2205,27 +2230,28 @@ end
 #  in rows on the left after panning, we need to account for cycled hints.
 def convert_key_to_index key
   i = IDX.index(key)
-  if i
-    # @log.debug "get_index with #{key}: #{i}. #{@stact}. #{@viewport.size}"
-    vps = @viewport.size
-    # TODO: if very high key given, consider going to last file ?
-    #  that way one can press zz or ZZ to go to last file.
-    # 2019-04-11 - XXX actually this doesnt place the cursor on last file
-    #  it opens it, which may not be what we want
-    retnil = nil # vps - 1 # nil
-    return retnil if @stact == 0 && i + @stact >= vps
-    # return nil if @stact > 0 && i + @stact >= vps && i + @stact - vps >= @stact
-    return retnil if @stact > 0 && i + @stact >= vps && i - vps >= 0
+  return nil unless i
 
-    if i + @stact >= vps
-      # panning case, hints are recycled
-      return (i + @stact) - vps
-    else
-      # regular hint
-      return i + @stact # if i
-    end
-  end
-  nil
+  # @log.debug "get_index with #{key}: #{i}. #{@stact}. #{@viewport.size}"
+  vps = @viewport.size
+  # TODO: if very high key given, consider going to last file ?
+  #  that way one can press zz or ZZ to go to last file.
+  # 2019-04-11 - XXX actually this doesnt place the cursor on last file
+  #  it opens it, which may not be what we want
+  retnil = nil # vps - 1 # nil
+  # user has entered a key that is outside of range, return nil
+  return retnil if @stact == 0 && i + @stact >= vps
+
+  # again, key out of range
+  # return nil if @stact > 0 && i + @stact >= vps && i + @stact - vps >= @stact
+  return retnil if @stact > 0 && i + @stact >= vps && i - vps >= 0
+
+  # panning case, hints are recycled
+  return (i + @stact) - vps if i + @stact >= vps
+
+  # regular hint
+  return i + @stact # if i
+
 end
 
 def delete_file
@@ -2447,7 +2473,7 @@ def file_actions action=nil
   when :delete
     delcommand = 'rmtrash'
     clear_last_line
-    print "#{delcommand} #{text} ? [yn?]: "
+    print "#{delcommand} #{text[0..40]} ? [yn?]: "
     key = get_char
     view_selected_files if key == '?'
     return if key != 'y'
@@ -2455,7 +2481,8 @@ def file_actions action=nil
     clear_last_line
     print "\r deleting ..."
     system "#{delcommand} #{shfiles}"
-    message "Deleted #{text}."
+    @log.info "trashed #{shfiles}."
+    message "Deleted #{text[0..40]}."
     refresh
 
   when :move
@@ -2565,7 +2592,7 @@ def file_actions action=nil
       return
     end
 
-    target = readline "Rename #{text} to : "
+    target = readline "Rename #{text[0..40]} to : "
     return if target == '' || target == '.' || target == '..'
 
     # file = File.expand_path(files)
@@ -2577,7 +2604,8 @@ def file_actions action=nil
 
     begin
       FileUtils.mv first, target
-      message "Renamed #{first} to #{target}."
+      message "Renamed #{first[0..40]} to #{target}."
+      @log.info "Renamed #{first} to #{target}."
     rescue StandardError => exc
       @log.warn exc.to_s
       @log.warn "RENAME: files: #{first}, target:#{target}"
@@ -2610,6 +2638,7 @@ def file_actions action=nil
 
       begin
         FileUtils.mv f, target
+        @log.info "Renamed #{f} to #{target}."
         ccount += 1
       rescue StandardError => exc
         @log.warn "REMSPACE: #{exc}"
@@ -2634,6 +2663,7 @@ def file_actions action=nil
     system "#{menu_text} #{shfiles}"
     pause # putting this back 2019-04-13 - file doesn't show anything
     message "Ran #{menu_text}."
+    @log.info "#{menu_text} #{shfiles}"
     setup_terminal
     refresh
   end
@@ -2641,6 +2671,7 @@ def file_actions action=nil
   return if count == 0
 
   clean_selected_files
+  visual_block_clear # 2019-04-15 - get out of mode after operation over.
 end
 
 # remove non-existent files from select list due to move or delete
@@ -2768,6 +2799,7 @@ end
 
 def vidir
   system 'vidir'
+  refresh
   setup_terminal
 end
 
@@ -2911,7 +2943,7 @@ def visual_mode_toggle
   message "Visual mode is #{@visual_mode}."
 end
 
-# Called from Escape key only. Clears selection.
+# Called from Escape key and scripts and file actions. Clears selection.
 def visual_block_clear
   if @visual_block_start
     star = [@visual_block_start, @cursor].min
@@ -2921,6 +2953,8 @@ def visual_block_clear
   @visual_block_start = nil
   @visual_mode = nil
   @mode = nil if @mode == 'VIS'
+  # is this the right place to put this ??? 2019-04-16 -
+  clean_selected_files
 end
 
 # ------------- file matching methods --------------------------------#
@@ -3086,12 +3120,15 @@ def scripts
 
   # 2019-04-08 - to avoid confusion, we pass name of file under cursor
   # script may ignore this and use selected_files
+
+  # reset clears the screen, we don't want that. just unhide cursor and echo keys TODO
   reset_terminal
   system %( #{binding} "#{current_file}" )
 
   # system %(echo "#{cf}" | xargs #{binding})
   pause
   setup_terminal
+  visual_block_clear
   refresh
 end
 
@@ -3231,12 +3268,7 @@ def enhance_file_list
       # f1 = `zsh -c 'print -rl -- #{d}*(omM)'`.split("\n")
       f = get_files_by_mtime(d)
 
-      # @log.warn "f1:#{f1} != f:#{f} in #{d}" if f1 != f
-      # order returned by zsh and ruby are different since the time is the same
-
-      # TODO: use ruby this throws errors if not files
       if f && !f.empty?
-        # @log.debug "CONCAT: #{f}" if @debug_flag
         @files.concat f
         @files.concat get_important_files(d)
       end
