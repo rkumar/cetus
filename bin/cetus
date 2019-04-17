@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-17 17:17
+#  Last update: 2019-04-17 23:59
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -1571,16 +1571,17 @@ end
 def main_menu
   h = {
     :a => :ag,
-    '/' => :ffind,
+   '/' => :ffind,
     :l => :locate,
     :v => :vidir,
     :z => :z_interface,
     :d => :child_dirs,
     :r => :recent_files,
-    '1' => :select_from_visited_files,
-    '2' => :select_from_used_dirs,
+   '1' => :select_from_visited_files,
+   '2' => :select_from_used_dirs,
+   '3' => :view_selected_files,
     :t => :dirtree,
-    '4' => :tree,
+   '4' => :tree,
     :o => :order_menu,
     :F => :filter_menu,
     :c => :create_menu,
@@ -1813,9 +1814,11 @@ def order_menu
   rescan_required
 end
 
+# TODO: create a link
 def create_menu
   h = { f: :create_a_file,
         d: :create_a_dir,
+        s: :create_dir_with_selection,
         b: :create_bookmark }
   _, menu_text = menu 'Create Menu', h
 end
@@ -2325,6 +2328,7 @@ end
 # enter or goto target dir and come back.
 def move_instant
   # FIXME: cannot be in target directory and do auto update
+  # should we have a key for specifying move_target ?
 
   if @selected_files.empty?
     target = readline "Enter target directory for moving files (#{@move_target}):"
@@ -2395,6 +2399,7 @@ end
 def command_file prompt, *command
   pauseyn = command.shift
   command = command.join ' '
+  clear_last_line
   print "[#{prompt}] Choose a file [#{@view[@cursor]}]: "
   file = ask_hint @view[@cursor]
   # print "#{prompt} :: Enter file shortcut: "
@@ -3164,15 +3169,21 @@ end
 
 # ------------------- scripts ------------------ #
 # prompt for scripts to execute, giving file name under cursor
-def scripts
+def scripts binding=nil
   # some scripts may work with the selected_files and not want to be called
   #  with filenames.
   write_selected_files
 
-  title = 'Select a script'
-  script_path = '~/.config/cetus/scripts'
-  binding = `find #{script_path} -type f | fzf --prompt="#{title} :"`.chomp
-  return if binding.nil? || binding == ''
+  unless binding
+    title = 'Select a script'
+    script_path = '~/.config/cetus/scripts'
+    binding = `find #{script_path} -type f | fzf --prompt="#{title} :"`.chomp
+    return if binding.nil? || binding == ''
+  end
+  unless File.exist? binding
+    @log.warn "Unable to find #{binding}"
+    return
+  end
 
   # TODO: check if binding is a file and executable
   # xargs only seems to take the first file
@@ -3195,6 +3206,16 @@ def scripts
   setup_terminal
   visual_block_clear
   refresh
+end
+
+# this is quite important and should not be left to a script
+# example of calling a script from somewhere directly without selection
+def create_dir_with_selection
+  script_path = '~/.config/cetus/scripts'
+  script = File.expand_path(File.join(script_path, 'create_dir_with_selection'))
+  return unless File.exist? script
+
+  scripts script
 end
 
 # allow user to select a script that generates filenames which
