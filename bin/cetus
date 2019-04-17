@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-16 11:12
+#  Last update: 2019-04-17 11:07
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -41,76 +41,76 @@ CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
 @bindings = {
-        '`' => 'main_menu',
-        '=' => 'toggle_menu',
-      'M-s' => 'selection_menu',
-      'M-o' => 'order_menu',
-    'ENTER' => 'select_current',
-      'C-p' => 'page_current',
-      'C-e' => 'edit_current',
-      'C-o' => 'open_current',
-      'C-s' => 'toggle_select',
-      'C-r' => 'reduce',
-      'C-g' => 'debug_vars',
-        '*' => 'toggle_multiple_selection',
-      'M-a' => 'select_all',
-      'M-A' => 'unselect_all',
-        '!' => 'execute',
-        ',' => 'goto_parent_dir',
-        '~' => 'goto_home_dir',
-        '-' => 'goto_previous_dir',
-        '+' => 'goto_dir', # 2019-03-07 - TODO: change binding
-        '.' => 'pop_dir',
-        ':' => 'subcommand',
-        "'" => 'goto_bookmark',
-        '"' => 'file_starting_with',
-        '/' => 'enter_regex',
-      'M-p' => 'prev_page',
-      'M-n' => 'next_page',
-     'PgUp' => 'prev_page',
-     'PgDn' => 'next_page',
-     'Home' => 'goto_top',
-      'End' => 'goto_end',
-    'SPACE' => 'next_page:Page Down',
-      'M-f' => 'select_from_visited_files',
-      'M-d' => 'select_from_used_dirs',
-      'M-b' => 'bookmark_menu',
-      'M-m' => 'create_bookmark',
-      'M-M' => 'view_bookmarks',
-      'C-c' => 'escape',
-   'ESCAPE' => 'escape',
-      'TAB' => 'views',
-      'C-i' => 'views',
-        # '?' => 'dirtree',
-        'D' => 'delete_file',
-        # 'M' => 'file_actions most',
-        'M' => 'move_instant',
-        'q' => 'quit_command', # was Q now q 2019-03-04 -
-    # "RIGHT"   => "column_next",
-    'RIGHT' => 'select_current', # changed 2018-03-12 - for faster navigation
-     'LEFT' => 'goto_parent_dir', # changed on 2018-03-12 - earlier column_next 1
-        ']' => 'column_next: goto next column',
-        '[' => 'column_next 1: goto previous column',
-      'C-x' => 'file_actions',
-      'M--' => 'columns_incdec -1: reduce column width',
-      'M-+' => 'columns_incdec 1: increase column width',
-        'S' => 'command_file list y ls -lh',
-        'L' => 'command_file Page n less',
-      'C-d' => 'cursor_scroll_dn',
-      'C-b' => 'cursor_scroll_up',
-       'UP' => 'cursor_up',
-     'DOWN' => 'cursor_dn',
-  'C-SPACE' => 'visual_mode_toggle',
-        '@' => 'scripts',
-        '#' => 'generators',
+  '`' => 'main_menu',
+  '=' => 'toggle_menu',
+  'M-s' => 'selection_menu',
+  'M-o' => 'order_menu',
+  'ENTER' => 'select_current',
+  'C-p' => 'page_current',
+  'C-e' => 'edit_current',
+  'C-o' => 'open_current',
+  'C-s' => 'toggle_select',
+  'C-r' => 'reduce',
+  'C-g' => 'debug_vars',
+  '*' => 'toggle_multiple_selection',
+  'M-a' => 'select_all',
+  'M-A' => 'unselect_all',
+  '!' => 'execute',
+  ',' => 'goto_parent_dir',
+  '~' => 'goto_home_dir',
+  '-' => 'goto_previous_dir',
+  '+' => 'goto_dir', # 2019-03-07 - TODO: change binding
+  '.' => 'pop_dir',
+  ':' => 'subcommand',
+  "'" => 'goto_bookmark',
+  '"' => 'file_starting_with',
+  '/' => 'enter_regex',
+  'M-p' => 'prev_page',
+  'M-n' => 'next_page',
+  'PgUp' => 'prev_page',
+  'PgDn' => 'next_page',
+  'Home' => 'goto_top',
+  'End' => 'goto_end',
+  'SPACE' => 'next_page:Page Down',
+  'M-f' => 'select_from_visited_files',
+  'M-d' => 'select_from_used_dirs',
+  'M-b' => 'bookmark_menu',
+  'M-m' => 'create_bookmark',
+  'M-M' => 'view_bookmarks',
+  'C-c' => 'escape',
+  'ESCAPE' => 'escape',
+  'TAB' => 'views',
+  'C-i' => 'views',
+  # '?' => 'dirtree',
+  'D' => 'delete_file',
+  # 'M' => 'file_actions most',
+  'M' => 'move_instant',
+  'q' => 'quit_command', # was Q now q 2019-03-04 -
+  # "RIGHT"   => "column_next",
+  'RIGHT' => 'select_current', # changed 2018-03-12 - for faster navigation
+  'LEFT' => 'goto_parent_dir', # changed on 2018-03-12 - earlier column_next 1
+  ']' => 'column_next: goto next column',
+  '[' => 'column_next 1: goto previous column',
+  'C-x' => 'file_actions',
+  'M--' => 'columns_incdec -1: reduce column width',
+  'M-+' => 'columns_incdec 1: increase column width',
+  'S' => 'command_file list y ls -lh',
+  'L' => 'command_file Page n less',
+  'C-d' => 'cursor_scroll_dn',
+  'C-b' => 'cursor_scroll_up',
+  'UP' => 'cursor_up',
+  'DOWN' => 'cursor_dn',
+  'C-SPACE' => 'toggle_visual_mode',
+  '@' => 'scripts',
+  '#' => 'generators',
 
-        '?' => 'print_help',
-       'F1' => 'print_help',
-       'F2' => 'child_dirs',
-       'F3' => 'dirtree',
-       'F4' => 'tree',
-     'S-F1' => 'dirtree',
-     'S-F2' => 'tree'
+  '?' => 'print_help',
+  'F1' => 'print_help',
+  'F2' => 'child_dirs',
+  'F3' => 'dirtree',
+  'F4' => 'tree',
+  'S-F1' => 'dirtree',
+  'S-F2' => 'tree'
 
 }
 
@@ -315,8 +315,8 @@ PAGER_COMMAND = {
 }.freeze
 @dir_position = {}
 @movement = @old_cursor = nil # cursor movement has happened only, don't repaint
-@multiple_selection = true # single select
 ## FLAGS
+@multiple_selection = true # single select
 @group_dirs = true
 # truncate long filenames from :right, :left or :center.
 @truncate_from = :center
@@ -325,6 +325,34 @@ PAGER_COMMAND = {
 @selected_files_fullpath_flag = false
 @selected_files_escaped_flag = false
 @keys_to_clear = nil
+
+# See toggle_value
+@toggles = {
+  ignore_case: true,
+  group_directories: true,
+  # long_listing: false,
+  enhanced_mode: true,
+  visual_mode: false,
+  display_file_stats: true,
+  toggle_selected_files_fullpath_flag: false,
+  toggle_selected_files_escaped_flag: false,
+  multiple_selection: true,
+  # toggle_pager_mode: false,
+  selection_mode: false, # typing hint adds to selection, does not open
+  debug_flag: false,
+  toggle_filename_status_line: true
+}
+@cycles = { truncate_from: :center,
+            show_hidden: nil }
+@enums = {
+  truncate_from: %i[left right center],
+  show_hidden: [nil, 'D']
+}
+# var is name of variable to be set
+@options = {
+  truncate_from: { current: :center, values: %i[left right center], var: :truncate_from },
+  show_hidden: { current: nil, values: [nil, 'D'], var: :hidden }
+}
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'
@@ -359,13 +387,13 @@ CURSOR_COLOR = REVERSE
 # This hash contains color codes for extensions. It is updated from
 # LS_COLORS.
 @ls_color = {
-       '.rb' => RED,
-      '.tgz' => MAGENTA,
-      '.zip' => MAGENTA,
+  '.rb' => RED,
+  '.tgz' => MAGENTA,
+  '.zip' => MAGENTA,
   '.torrent' => GREEN,
-      '.srt' => GREEN,
-     '.part' => "\e[40;31;01m",
-       '.sh' => CYAN
+  '.srt' => GREEN,
+  '.part' => "\e[40;31;01m",
+  '.sh' => CYAN
 }
 # This hash contains colors for file patterns, updated from LS_COLORS
 @ls_pattern = {}
@@ -373,10 +401,10 @@ CURSOR_COLOR = REVERSE
 # Default values in absence of LS_COLORS
 @ls_ftype = {
   'directory' =>  BLUE,
-       'link' =>  "\e[01;36m",
-         'mi' =>  "\e[01;31;7m",
-         'or' =>  "\e[40;31;01m",
-         'ex' =>  "\e[01;32m"
+  'link' =>  "\e[01;36m",
+  'mi' =>  "\e[01;31;7m",
+  'or' =>  "\e[40;31;01m",
+  'ex' =>  "\e[01;32m"
 }
 ## --------------------------------------------- ##
 
@@ -416,8 +444,8 @@ def read_directory
   @filterstr ||= 'M'
   # @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}#{@filterstr})'`.split("\n")
   @files = list_files
-  @files = group_directories_first(@files) if @group_dirs
-  return unless @enhanced_mode
+  @files = group_directories_first(@files) if @toggles[:group_directories]
+  return unless @toggles[:enhanced_mode]
 
   enhance_file_list
   @files = @files.uniq
@@ -467,7 +495,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
     end
   end
 
-  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && @ignorecase
+  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && @toggles[:ignore_case]
 
   # zsh gives mtime sort with latest first, ruby gives latest last
   sorted_files.reverse! if sorto[0] == 'O'
@@ -491,7 +519,7 @@ end
 # ------------------- create_viewport ------------------ #
 def create_viewport
   @view = if @patt
-            if @ignorecase
+            if @toggles[:ignore_case]
               @files.grep(/#{@patt}/i)
             else
               @files.grep(/#{@patt}/)
@@ -529,7 +557,7 @@ def print_title
   fl = @view.size
 
   # fix count of entries so separator and enhanced entries don't show up
-  if @enhanced_mode
+  if @toggles[:enhanced_mode]
     ix = @viewport.index SEPARATOR
     fin = @sta + ix if ix
 
@@ -562,7 +590,7 @@ def status_line
   # Print the filename at the right side of the status line
   # sometimes due to search, there is no file
   if cf
-    if @debug_flag
+    if @toggles[:debug_flag]
       # XXX this will not work on file basis FIXME
       print_debug_info cf
     else
@@ -574,7 +602,7 @@ def status_line
   # patt and message are together, no gap, why not ? 2019-04-08 -
   if @patt && @patt != ''
     patt = "[/#{@patt}" + ']' # to get unfrozen string
-    patt[-1] = '/i]' if @ignorecase
+    patt[-1] = '/i]' if @toggles[:ignore_case]
   end
   # bring cursor to start of line
   # add background color
@@ -1144,8 +1172,8 @@ end
 
 # allow single or multiple selection with C-s key
 def toggle_multiple_selection
-  @multiple_selection = !@multiple_selection
-  message "multiple_selection set to #{@multiple_selection}."
+  # @multiple_selection = !@multiple_selection
+  toggle_value :multiple_selection
 end
 
 ## open file or directory
@@ -1321,7 +1349,7 @@ end
 ## unselect all files
 def unselect_all
   @selected_files = []
-  @visual_mode = nil
+  @toggles[:visual_mode] = @visual_mode = false
 end
 
 ## select all entries (files and directories)
@@ -1372,12 +1400,10 @@ end
 #
 def toggle_selection_mode
   if @mode == 'SEL'
-    # @multiple_selection = 1
     unselect_all
     @mode = nil
     message 'Selection mode is single.   '
   else
-    # @multiple_selection = 2
     @mode = 'SEL'
     message 'Typing a hint selects the file. Typing again will clear   .  '
   end
@@ -1543,36 +1569,36 @@ end
 # MENU MAIN
 def main_menu
   h = {
-     :a => :ag,
+    :a => :ag,
     '/' => :ffind,
-     :l => :locate,
-     :v => :vidir,
-     :z => :z_interface,
-     :d => :child_dirs,
-     :r => :recent_files,
+    :l => :locate,
+    :v => :vidir,
+    :z => :z_interface,
+    :d => :child_dirs,
+    :r => :recent_files,
     '1' => :select_from_visited_files,
     '2' => :select_from_used_dirs,
-     :t => :dirtree,
+    :t => :dirtree,
     '4' => :tree,
-     :o => :order_menu,
-     :F => :filter_menu,
-     :c => :create_menu,
-     :b => :bookmark_menu,
-     :s => :selection_menu,
-     :x => :extras
+    :o => :order_menu,
+    :F => :filter_menu,
+    :c => :create_menu,
+    :b => :bookmark_menu,
+    :s => :selection_menu,
+    :x => :extras
   }
   menu 'Main Menu', h
 end
 
 def selection_menu
   h = {
-     :a => :select_all,
-     :u => :unselect_all,
-     :s => :toggle_select,
+    :a => :select_all,
+    :u => :unselect_all,
+    :s => :toggle_select,
     '*' => 'toggle_multiple_selection',
-    'x' => 'visual_mode_toggle',
+    'x' => 'toggle_visual_mode',
     'm' => 'toggle_selection_mode',
-     :v => :view_selected_files
+    :v => :view_selected_files
   }
   menu 'Selection Menu', h
 end
@@ -1620,41 +1646,41 @@ def menu title, h
   [key, binding]
 end
 
+# some toggles can be invoked directly on a key, or through another menu.
+# Some go to methods like multiple_selection from a key
+# WARNING: method and toggle should not have same name, else flag will toggle twice.
 def toggle_menu
-  h = { h: :toggle_hidden,
-        c: :toggle_case,
-        l: :toggle_long_list,
+  h = { h: :show_hidden,
+        c: :ignore_case,
+        l: :long_listing,
         '1' => :toggle_columns,
-        d: :toggle_group_dirs,
+        d: :group_directories,
         :p => :toggle_pager_mode,
-        :D => :toggle_debug_flag,
-        '8' => :toggle_multiple_selection,
-        '*' => :toggle_multiple_selection,
-        'S' => :toggle_selection_mode,
-        v: :visual_mode_toggle,
-        t: :toggle_truncate_from,
-        e: :toggle_enhanced_list }
+        :D => :debug_flag,
+        '8' => :multiple_selection,
+        '*' => :multiple_selection,
+        'S' => :selection_mode,
+        v: :visual_mode,
+        t: :truncate_from,
+        e: :enhanced_mode }
+  # TODO: add other values at end, what key ?
 
   _, menu_text = menu 'Toggle Menu', h
   return unless menu_text
 
+  if @toggles.key? menu_text
+    # toggle_value @toggles[menu_text]
+    toggle_value menu_text
+    rescan_required
+    return
+  end
+  if @cycles.key? menu_text
+    rotate_value menu_text
+    rescan_required
+    return
+  end
+
   case menu_text
-  when :toggle_hidden
-    # NOTE: now that I am shifting queries to ruby not sure this will continue
-    # FNM_DOTMATCH
-    #  working everywhere
-    # zsh D - dot files should show
-    @hidden = @hidden ? nil : 'D'
-    message "Show hidden is now #{!@hidden.nil?}"
-    rescan_required
-  when :toggle_case
-    @ignorecase = !@ignorecase
-    message "Ignore Case is now #{@ignorecase}"
-    rescan_required
-  when :toggle_group_dirs
-    @group_dirs = !@group_dirs
-    message "Group Dirs First is now #{@group_dirs}"
-    rescan_required
   when :toggle_columns
     @gviscols = if @gviscols == 1
                   3
@@ -1675,12 +1701,8 @@ def toggle_menu
                          ENV['MANPAGER'] || ENV['PAGER']
                        end
     message "Default command is #{@default_command}"
-  when :toggle_enhanced_list
-    @enhanced_mode = !@enhanced_mode
-    message "Enhanced mode is #{@enhanced_mode}"
-    rescan_required
 
-  when :toggle_long_list
+  when :long_listing
     @long_listing = !@long_listing
     if @long_listing
       @saved_gviscols = @gviscols
@@ -1697,24 +1719,56 @@ def toggle_menu
     end
     message "Long listing is #{@long_listing}, vis cols is #{@gviscols}"
     rescan_required
-  when :toggle_debug_flag
-    @debug_flag = !@debug_flag
-    message "Debug flag is #{@debug_flag}"
+    # when :toggle_debug_flag
+    # @debug_flag = !@debug_flag
+    # message "Debug flag is #{@debug_flag}"
 
-  when :toggle_truncate_from
-    # if filename exceeds width cut from which direction
-    @truncate_from = case @truncate_from
-                     when :center
-                       :left
-                     when :left
-                       :right
-                     when :right
-                       :center
-                     else
-                       :center
-                     end
-    message "Truncate long filenames from: #{@truncate_from}"
+    # when :toggle_truncate_from
+    # # if filename exceeds width cut from which direction
+    # @truncate_from = case @truncate_from
+    # when :center
+    # :left
+    # when :left
+    # :right
+    # when :right
+    # :center
+    # else
+    # :center
+    # end
+    # message "Truncate long filenames from: #{@truncate_from}"
   end
+end
+
+# toggles the value of a toggle flag, also setting the variable if defined
+# WARN: be careful of variable being set directly. Replace such vars one by one.
+def toggle_value flag
+  @toggles[flag] = !@toggles[flag]
+  #  TODO: 2019-04-16 - can we set a variable so we don't have to check
+  #   against a hash everywhere. variable name can be in hash too
+  if instance_variable_defined? "@#{flag}"
+    instance_variable_set "@#{flag}", @toggles[flag]
+  end
+  message "#{flag} is set to #{@toggles[flag]}"
+end
+
+def cycle_value symb
+  curr = @cycles[symb] # get current value
+  index = @enums[symb].index(curr)
+  index += 1
+  index = 0 if index >= @enums[symb].count
+  @cycles[symb] = @enums[symb][index]
+  message "#{symb} is set to #{@cycles[symb]}"
+end
+
+def rotate_value symb
+  curr = @options[symb][:current] # get current value
+  index = @options[symb][:values].index(curr)
+  index += 1
+  index = 0 if index >= @options[symb][:values].count
+  x = @options[symb][:current] = @options[symb][:values][index]
+  var = @options[symb][:var]
+  instance_variable_set "@#{var}", x
+  message "#{symb} is set to #{@options[symb][:current]}, #{@hidden}"
 end
 
 def order_menu
@@ -1846,7 +1900,7 @@ end
 
 def filter_menu
   h = { :d => :dirs, :f => :files, :e => :emptydirs, '0' => :emptyfiles,
-  :r => :reduce_list, :x => :extension }
+        :r => :reduce_list, :x => :extension }
   _, menu_text = menu 'Filter Menu', h
   files = nil
   case menu_text
@@ -2123,9 +2177,8 @@ end
 def dirtree
   @title = 'Child directories recursive'
   # zsh **/ is recursive
-  files1 = `zsh -c 'print -rl -- **/*(/#{@sorto}#{@hidden}M)'`.split("\n")
+  # files1 = `zsh -c 'print -rl -- **/*(/#{@sorto}#{@hidden}M)'`.split("\n")
   @files = Dir['**/']
-  @log.debug "zsh #{files1} != rb #{@files}" if files1 != @files
   message "#{@files.size} files."
   # redraw
 end
@@ -2267,6 +2320,8 @@ def delete_file
   file_actions :delete
 end
 
+# instantly move to move target. Use during bulk operations so you don't have to
+# enter or goto target dir and come back.
 def move_instant
   # FIXME: cannot be in target directory and do auto update
 
@@ -2941,15 +2996,15 @@ def remove_from_selection file
 end
 
 # ------------- visual mode methods --------------------------------#
-def visual_mode_toggle
+def toggle_visual_mode
   @mode = nil
-  @visual_mode = !@visual_mode
-  if @visual_mode
-    @mode = 'VIS'
-    @visual_block_start = @cursor
-    add_to_selection current_file
-  end
-  message "Visual mode is #{@visual_mode}."
+  # @visual_mode = !@visual_mode
+  toggle_value :visual_mode
+  return unless @visual_mode
+
+  @mode = 'VIS'
+  @visual_block_start = @cursor
+  add_to_selection current_file
 end
 
 # Called from Escape key and scripts and file actions. Clears selection.
@@ -2960,7 +3015,7 @@ def visual_block_clear
     remove_from_selection @view[star..fin]
   end
   @visual_block_start = nil
-  @visual_mode = nil
+  @toggles[:visual_mode] = @visual_mode = false
   @mode = nil if @mode == 'VIS'
   # is this the right place to put this ??? 2019-04-16 -
   clean_selected_files
@@ -3251,7 +3306,7 @@ end
 # latest source, but in some cases even this can be misleading since running a program accesses
 # include files.
 def enhance_file_list
-  return unless @enhanced_mode
+  return unless @toggles[:enhanced_mode]
 
   begin
     actr = @files.size
@@ -3449,8 +3504,8 @@ end
 # func can be :mtime or :atime or :ctime or :birthtime
 def gmr dir, type, func
   file = Dir.glob(dir + '/*')
-            .select { |f| File.send(type, f) }
-            .max_by { |f| File.send(func, f) }
+    .select { |f| File.send(type, f) }
+    .max_by { |f| File.send(func, f) }
   file = File.basename(file) + '/' if file && type == :directory?
   return file.gsub('//', '/') if file
 
@@ -3551,7 +3606,7 @@ def only_cursor_moved?
   end
 
   # we may want to print debug info if flag is on
-  if @debug_flag
+  if @toggles[:debug_flag]
     clear_last_line
     print_debug_info
   else
