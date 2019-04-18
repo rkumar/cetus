@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-18 23:14
+#  Last update: 2019-04-18 23:35
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -334,7 +334,7 @@ PAGER_COMMAND = {
 # we need to set these on startup
 @toggles = {
   ignore_case: true,
-  group_directories: true,
+  # group_directories: true,
   long_listing: false,
   enhanced_mode: true,
   visual_mode: false,
@@ -356,6 +356,7 @@ PAGER_COMMAND = {
 # var is name of variable to be set
 @options = {
   truncate_from: { current: :center, values: %i[left right center], var: :truncate_from },
+  group_directories: { current: :first, values: %i[first none last] },
   show_hidden: { current: nil, values: [nil, 'D'], var: :hidden }
 }
 
@@ -448,7 +449,8 @@ def read_directory
   @filterstr ||= 'M'
   # @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}#{@filterstr})'`.split("\n")
   @files = list_files
-  @files = group_directories_first(@files) if @toggles[:group_directories]
+  # @files = group_directories_first(@files) if @toggles[:group_directories]
+  group_directories_first
   return unless @toggles[:enhanced_mode]
 
   enhance_file_list
@@ -1345,11 +1347,18 @@ def refresh
 end
 
 # put directories first, then files
-def group_directories_first files
+def group_directories_first
+  return if @options[:group_directories][:current] == :none
+
+  files = @files
   dirs = files.select { |f| File.directory?(f) }
   # earlier I had File? which removed links, esp dead ones
   fi   = files.reject { |f| File.directory?(f) }
-  dirs + fi
+  @files = if @options[:group_directories][:current]== :first
+             dirs + fi
+           else
+             fi + dirs
+           end
 end
 
 ## unselect all files
@@ -1773,13 +1782,13 @@ end
 
 def rotate_value symb
   curr = @options[symb][:current] # get current value
-  index = @options[symb][:values].index(curr)
+  index = @options[symb][:values].index(curr) || 0
   index += 1
   index = 0 if index >= @options[symb][:values].count
   x = @options[symb][:current] = @options[symb][:values][index]
   var = @options[symb][:var]
-  instance_variable_set "@#{var}", x
-  message "#{symb} is set to #{@options[symb][:current]}, #{@hidden}"
+  instance_variable_set "@#{var}", x if var
+  message "#{symb} is set to #{@options[symb][:current]}. "
 end
 
 def order_menu
