@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-18 14:02
+#  Last update: 2019-04-18 23:14
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -220,6 +220,10 @@ def readline prompt='>'
   print "\e[?25h"
   system 'stty echo'
   begin
+    if prompt.length > 40
+      puts prompt
+      prompt = '>'
+    end
     target = Readline.readline(prompt, true)
   rescue Interrupt
     return nil
@@ -422,7 +426,6 @@ CURSOR_COLOR = REVERSE
 @default_sort_order = 'Om'
 @sorto = @default_sort_order
 @viewctr = 0
-@history = []
 ## sta is where view (viewport) begins, cursor is current row/file
 @sta = @cursor = 0
 @visual_mode = false
@@ -2395,13 +2398,30 @@ def copy_file
 
   count = rbfiles.count
   first = rbfiles.first
-  text = count == 1 ? File.basename(first) : "#{count} files"
+  text = "#{count} files"
 
   # Target must be directory for multiple files.
   # NOTE: target should not be same as source dir but there can be files
   #  from multiple directories
-  default = @move_target.nil? ? '.' : @move_target
-  target = readline "Copy #{text} to (#{default}): "
+  if count == 1
+    if File.exist? File.basename(first)
+      default = get_unique_file_name File.basename(first)
+      Readline::HISTORY.push default
+    else
+      default = '.'
+    end
+    # default : if file exists here, then add suffix
+    # if no file here, then directory is default.
+  else
+    default = if File.exist? File.basename(first)
+                ''
+              else
+                '.'
+              end
+    # current directory is default if first file does not exist
+    # if first file exists here, then no default
+  end
+  target = readline "Copy to (#{default}): "
   return unless target # C-c
 
   target = default if target == ''
@@ -2432,6 +2452,17 @@ def copy_file
   refresh
 end
 
+def get_unique_file_name fname
+  100.times do |i|
+    suffix = "%03d" % i
+    f = fname + '.' + suffix
+    return f unless File.exist?(f)
+  end
+
+  timestamp = Time.now.strftime("%Y%m%d-%H%M%S")
+  return fname + '.' + timestamp
+end
+
 def rename_file
   rbfiles = current_or_selected_files
   return if rbfiles.nil? || rbfiles.empty?
@@ -2445,6 +2476,7 @@ def rename_file
     return
   end
 
+  Readline::HISTORY.push File.basename(first)
   target = readline "Rename #{text[0..40]} to : "
   return if target == '' || target == '.' || target == '..'
 
@@ -2480,7 +2512,9 @@ def zip_file
   # text = count == 1 ? File.basename(first) : "#{count} files"
 
   extn = '.tgz'
-  target = readline "Archive name (#{extn}): "
+  default = "archive#{extn}"
+  Readline::HISTORY.push default # check for exist before pushing
+  target = readline "Archive name (#{default}): "
   return unless target
   return if target == ''
 
@@ -2827,7 +2861,7 @@ def ag
   #     -t : all text files
   #     -l : print only file names
   #     -a : print all files, even ignored
-  system %(ag -t "#{pattern}")
+  system %(ag -t "#{pattern}" | less)
 
   pause
   files = `ag -lt "#{pattern}"`.split("\n")
