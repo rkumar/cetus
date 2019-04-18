@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-17 23:59
+#  Last update: 2019-04-18 10:22
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -551,6 +551,7 @@ def print_title
   @title ||= Dir.pwd.sub(ENV['HOME'], '~')
 
   # Add bookmark next to name of dir, if exists
+  # FIXME This should not happen in other listings like find selected files etc
   bm = @bookmarks.key(Dir.pwd)
   bm = " ('#{bm})" if bm
 
@@ -1579,7 +1580,7 @@ def main_menu
     :r => :recent_files,
    '1' => :select_from_visited_files,
    '2' => :select_from_used_dirs,
-   '3' => :view_selected_files,
+   '3' => :list_selected_files,
     :t => :dirtree,
    '4' => :tree,
     :o => :order_menu,
@@ -1592,6 +1593,7 @@ def main_menu
   menu 'Main Menu', h
 end
 
+# copy and move here ?
 def selection_menu
   h = {
     :a => :select_all,
@@ -2321,7 +2323,212 @@ def convert_key_to_index key
 end
 
 def delete_file
-  file_actions :delete
+  # file_actions :delete
+  rbfiles = current_or_selected_files
+  return if rbfiles.nil? || rbfiles.empty?
+
+  count = rbfiles.count
+  first = rbfiles.first
+  text = count == 1 ? File.basename(first) : "#{count} files"
+  shfiles = Shellwords.join(rbfiles)
+
+  delcommand = 'rmtrash'
+  clear_last_line
+  print "#{delcommand} #{text[0..40]} ? [yn?]: "
+  key = get_char
+  view_selected_files if key == '?'
+  return if key != 'y'
+
+  clear_last_line
+  print "\r deleting ..."
+  system "#{delcommand} #{shfiles}"
+  @log.info "trashed #{shfiles}."
+  message "Deleted #{text[0..40]}."
+  refresh
+end
+
+def move_file
+  rbfiles = current_or_selected_files
+  return if rbfiles.nil? || rbfiles.empty?
+
+  count = rbfiles.count
+  first = rbfiles.first
+  text = count == 1 ? File.basename(first) : "#{count} files"
+
+  # multiple files can only be moved to a directory
+  default = @move_target.nil? ? '.' : @move_target
+  target = readline "Move #{text[0..40]} to (#{default}): "
+  return unless target
+
+  target = default if target == ''
+  target = File.expand_path(target)
+  return if target == ''
+
+  if count > 1 && !File.directory?(target)
+    perror 'Move target must be a directory for multiple files.'
+    return
+  end
+
+  if count == 1 && !File.directory?(target) && File.exist?(target)
+    perror "Target #{target} exists."
+    return
+  end
+
+  begin
+    FileUtils.mv rbfiles, target
+    message "Moved #{text} to #{target}."
+  rescue StandardError => exc
+    @log.warn "move_file: #{exc}."
+    @log.warn "MOVE: files: #{rbfiles}, target:#{target}"
+    perror exc.to_s
+  end
+  refresh
+end
+
+def copy_file
+  rbfiles = current_or_selected_files
+  return if rbfiles.nil? || rbfiles.empty?
+
+  count = rbfiles.count
+  first = rbfiles.first
+  text = count == 1 ? File.basename(first) : "#{count} files"
+
+  # Target must be directory for multiple files.
+  # NOTE: target should not be same as source dir but there can be files
+  #  from multiple directories
+  default = @move_target.nil? ? '.' : @move_target
+  target = readline "Copy #{text} to (#{default}): "
+  return unless target # C-c
+
+  target = default if target == ''
+  target = File.expand_path(target)
+  return if target == ''
+
+  if count > 1 && !File.directory?(target)
+    perror 'Copy target must be a directory for multiple files.'
+    return
+  end
+
+  if count == 1 && !File.directory?(target) && File.exist?(target)
+    perror "Target #{target} exists."
+    return
+  end
+
+  begin
+    FileUtils.cp rbfiles, target
+    message "Copied #{text} to #{target}."
+  rescue StandardError => exc
+    perror exc.to_s
+  end
+  refresh
+end
+
+def rename_file
+  rbfiles = current_or_selected_files
+  return if rbfiles.nil? || rbfiles.empty?
+
+  count = rbfiles.count
+  first = rbfiles.first
+  text = count == 1 ? File.basename(first) : "#{count} files"
+
+  if count > 1
+    perror 'Select only one file for rename.'
+    return
+  end
+
+  target = readline "Rename #{text[0..40]} to : "
+  return if target == '' || target == '.' || target == '..'
+
+  if File.exist? target
+    perror "Target (#{target}) exists."
+    return
+  end
+
+  begin
+    FileUtils.mv first, target
+    message "Renamed to #{target}."
+    @log.info "Renamed #{first} to #{target}."
+  rescue StandardError => exc
+    @log.warn exc.to_s
+    @log.warn "RENAME: files: #{first}, target:#{target}"
+    pause exc.to_s
+  end
+  refresh
+end
+
+def remove_spaces_from_name
+  # replace space with underscore in filename
+  # Issue. in many cases directory may have spaces,
+  #  so we are using basename only. So use in one directory.
+  #  TODO: move to script
+  rbfiles = current_or_selected_files
+  return if rbfiles.nil? || rbfiles.empty?
+
+  count = rbfiles.count
+  first = rbfiles.first
+  text = count == 1 ? File.basename(first) : "#{count} files"
+
+  clear_last_line
+  pause "Remove spaces from #{text}."
+
+  ccount = 0
+  rbfiles.each do |name|
+    f = File.basename(name)
+    next unless File.exist?(f)
+    next unless f.index ' '
+
+    target = f.tr(' ', '_')
+    next if File.exist? target
+
+    begin
+      FileUtils.mv f, target
+      @log.info "Renamed #{f} to #{target}."
+      ccount += 1
+    rescue StandardError => exc
+      @log.warn "REMSPACE: #{exc}"
+      perror exc.to_s
+    end
+  end
+  message "Renamed #{ccount} files."
+  refresh
+end
+
+def zip_file
+  rbfiles = current_or_selected_files
+  return if rbfiles.nil? || rbfiles.empty?
+
+  # count = rbfiles.count
+  # first = rbfiles.first
+  # text = count == 1 ? File.basename(first) : "#{count} files"
+
+  extn = '.tgz'
+  target = readline "Archive name (#{extn}): "
+  return unless target
+  return if target == ''
+
+  if target && target.size < 4
+    perror 'Use target of more than 4 characters.'
+    return
+  end
+  target += extn if File.extname(target) == ''
+
+  if File.exist? target
+    perror "Target (#{target}) exists."
+    return
+  end
+
+  # convert absolute paths to relative ones in this zip
+  # the problem with zip is that we have full paths
+  # so the zip file has full paths and extraction sucks
+  require 'pathname'
+  base = Pathname.new Dir.pwd
+  relfiles = rbfiles.map { |f| p = Pathname.new(f); p.relative_path_from(base) }
+  zfiles = Shellwords.join relfiles
+
+  system "tar zcvf #{target} #{zfiles}"
+  message "Created #{target} with #{relfiles.count} files."
+  setup_terminal
+  refresh
 end
 
 # instantly move to move target. Use during bulk operations so you don't have to
@@ -2330,41 +2537,22 @@ def move_instant
   # FIXME: cannot be in target directory and do auto update
   # should we have a key for specifying move_target ?
 
+  # for the mo, lets not move if nothing selected
   if @selected_files.empty?
-    target = readline "Enter target directory for moving files (#{@move_target}):"
-    return unless target
-    return if target == '' && @move_target.nil?
-
-    # take default value if user presses Enter
-    target = @move_target if target == ''
-    return unless target
-
-    # current dir if dot pressed FIXME you cannot move to current dir !!!
+    target = readline "Set Move target #{@move_target}:"
     target = Dir.pwd if target == '.'
     target = File.expand_path(target)
-    unless File.directory? target
-      perror "#{target} not a directory."
-      return
-    end
-    begin
-      f = current_file
-      FileUtils.mv f, target
-      @move_target = target
-      message "#{f} moved to #{File.basename(target)}. Target set."
-      @log.info "1.#{f} moved to #{target}."
-    rescue StandardError => exc
-      @log.warn 'Case 1:'
-      @log.warn "Target is #{target}, file was #{f}"
-      @log.warn exc.to_s
-    end
-    refresh
+    @move_target = target
+    message "Move target is #{@move_target}. Select files and press this key."
     return
   end
 
   # files selected. Use earlier target if there, else ask
+  # XXX how do we change it once set
   target = @move_target
   if target.nil? || target == ''
-    target = readline "Enter directory for moving files #{@move_target}:"
+    count = @selected_files.count
+    target = readline "Move #{count} files to :"
     return unless target
   end
   target = File.expand_path(target)
@@ -2374,7 +2562,6 @@ def move_instant
   end
 
   files = @selected_files
-  # TODO: shellwords
   ccount = 0
   files.each do |f|
     FileUtils.mv f, target
@@ -2531,7 +2718,7 @@ def file_actions action=nil
   if action
     menu_text = action
   else
-    key, menu_text = menu "File Menu for #{text}", h
+    key, menu_text = menu "File Menu for #{text[0..@gcols-20]}", h
     menu_text = :quit if key == 'q'
   end
   return unless menu_text # pressed some wrong key
@@ -2539,82 +2726,21 @@ def file_actions action=nil
   case menu_text.to_sym
 
   when :quit
-
+    1
   when :delete
-    delcommand = 'rmtrash'
-    clear_last_line
-    print "#{delcommand} #{text[0..40]} ? [yn?]: "
-    key = get_char
-    view_selected_files if key == '?'
-    return if key != 'y'
-
-    clear_last_line
-    print "\r deleting ..."
-    system "#{delcommand} #{shfiles}"
-    @log.info "trashed #{shfiles}."
-    message "Deleted #{text[0..40]}."
-    refresh
+    delete_file
 
   when :move
-    # multiple files can only be moved to a directory
-    default = @move_target.nil? ? '.' : @move_target
-    target = readline "Move #{text} to (#{default}): "
-    return unless target
-
-    target = default if target == ''
-    target = File.expand_path(target)
-    return if target == ''
-
-    if count > 1 && !File.directory?(target)
-      perror 'Move target must be a directory for multiple files.'
-      return
-    end
-
-    if count == 1 && !File.directory?(target) && File.exist?(target)
-      perror "Target #{target} exists."
-      return
-    end
-
-    begin
-      FileUtils.mv rbfiles, target
-      message "Moved #{text} to #{target}."
-    rescue StandardError => exc
-      @log.warn "C-x move: #{exc}."
-      @log.warn "MOVE: files: #{rbfiles}, target:#{target}"
-      perror exc.to_s
-    end
-    # 2019-03-08 - TODO if success remove from selection
-    refresh
+    move_file
 
   when :copy
-    # Target must be directory for multiple files.
-    # NOTE: target should not be same as source dir but there can be files
-    #  from multiple directories
-    default = @move_target.nil? ? '.' : @move_target
-    target = readline "Copy #{text} to (#{default}): "
-    return unless target # C-c
+    copy_file
 
-    target = default if target == ''
-    target = File.expand_path(target)
-    return if target == ''
+  when :zip
+    zip_file
 
-    if count > 1 && !File.directory?(target)
-      perror 'Copy target must be a directory for multiple files.'
-      return
-    end
-
-    if count == 1 && !File.directory?(target) && File.exist?(target)
-      perror "Target #{target} exists."
-      return
-    end
-
-    begin
-      FileUtils.cp rbfiles, target
-      message "Copied #{text} to #{target}."
-    rescue StandardError => exc
-      perror exc.to_s
-    end
-    refresh
+  when :rename
+    rename_file
 
   when :chdir
     # will only work if one selected. Check this out
@@ -2626,63 +2752,6 @@ def file_actions action=nil
   when :set_move_target
     set_move_target current_file
 
-  when :zip
-
-    target = readline 'Archive name: '
-    return unless target
-    return if target == ''
-
-    if File.exist? target
-      perror "Target (#{target}) exists"
-      return
-    end
-    if target && target.size < 4
-      perror 'Use target of more than 4 characters.'
-      return
-    end
-
-    # convert absolute paths to relative ones in this zip
-    require 'pathname'
-    base = Pathname.new Dir.pwd
-    relfiles = rbfiles.map { |f| p = Pathname.new(f); p.relative_path_from(base) }
-    zfiles = Shellwords.join relfiles
-
-    # the problem with zip is that we have full paths
-    # so the zip file has full paths and extraction sucks
-
-    # pause "(#{target}).zipping #{relfiles.count}: #{zfiles}"
-    system "tar zcvf #{target} #{zfiles}"
-    message "Created #{target} with #{relfiles.count} files."
-    setup_terminal
-    refresh
-
-  when :rename
-    if count > 1
-      perror 'Select only one file for rename.'
-      return
-    end
-
-    target = readline "Rename #{text[0..40]} to : "
-    return if target == '' || target == '.' || target == '..'
-
-    # file = File.expand_path(files)
-    # target = File.basename(file) if target == '.'
-    if File.exist? target
-      perror "Target (#{target}) exists."
-      return
-    end
-
-    begin
-      FileUtils.mv first, target
-      message "Renamed #{first[0..40]} to #{target}."
-      @log.info "Renamed #{first} to #{target}."
-    rescue StandardError => exc
-      @log.warn exc.to_s
-      @log.warn "RENAME: files: #{first}, target:#{target}"
-      pause exc.to_s
-    end
-    refresh
-
   when :most, :less, :vim
 
     system "#{menu_text} #{shfiles}"
@@ -2690,33 +2759,7 @@ def file_actions action=nil
     # should we remove from selection ?
 
   when :remspace
-    # replace space with underscore in filename
-    # Issue. in many cases directory may have spaces,
-    #  so we are using basename only. So use in one directory.
-    #  TODO: move to script
-    clear_last_line
-    pause "Remove spaces from #{text}."
-
-    ccount = 0
-    rbfiles.each do |name|
-      f = File.basename(name)
-      next unless File.exist?(f)
-      next unless f.index ' '
-
-      target = f.tr(' ', '_')
-      next if File.exist? target
-
-      begin
-        FileUtils.mv f, target
-        @log.info "Renamed #{f} to #{target}."
-        ccount += 1
-      rescue StandardError => exc
-        @log.warn "REMSPACE: #{exc}"
-        perror exc.to_s
-      end
-    end
-    message "Renamed #{ccount} files."
-    refresh
+    remove_spaces_from_name
 
   when :execute
     execute
@@ -3247,6 +3290,11 @@ def view_selected_files
   setup_terminal
 end
 # ------------- end of view_selected_files --------------------------------#
+
+def list_selected_files
+  @title = 'Selected Files'
+  @files = @selected_files
+end
 
 # write selected files to a file and return path
 # if no selected files then blank out the file, or else
