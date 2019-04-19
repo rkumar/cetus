@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-19 09:51
+#  Last update: 2019-04-19 10:54
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -187,6 +187,20 @@ def reset_terminal
   #            Also sets cursor to (0,0).
   # '\e[?1049l: Restore main screen buffer.
   print "\e[?7h\e[?25h\e[2J\e[;r\e[?1049l"
+
+  # Show user input.
+  system 'stty echo'
+end
+# Call before shelling to editor pager and when exiting
+def partial_reset_terminal
+  # Reset the terminal to a useable state (undo all changes).
+  # '\e[?7h':  Re-enable line wrapping.
+  # '\e[?25h': Unhide the cursor.
+  # '\e[2J':   Clear the terminal.
+  # '\e[;r':   Set the scroll region to its default value.
+  #            Also sets cursor to (0,0).
+  # '\e[?1049l: Restore main screen buffer.
+  print "\e[?7h\e[?25h\e[;r\e[?1049l"
 
   # Show user input.
   system 'stty echo'
@@ -3262,7 +3276,8 @@ def scripts binding=nil
 
   unless binding
     title = 'Select a script'
-    script_path = '~/.config/cetus/scripts'
+    # script_path = '~/.config/cetus/scripts'
+    script_path = File.join(CONFIG_PATH, 'cetus', 'scripts')
     binding = `find #{script_path} -type f | fzf --prompt="#{title} :"`.chomp
     return if binding.nil? || binding == ''
   end
@@ -3284,7 +3299,7 @@ def scripts binding=nil
   # script may ignore this and use selected_files
 
   # reset clears the screen, we don't want that. just unhide cursor and echo keys TODO
-  reset_terminal
+  partial_reset_terminal
   system %( #{binding} "#{current_file}" )
 
   # system %(echo "#{cf}" | xargs #{binding})
@@ -3297,9 +3312,13 @@ end
 # this is quite important and should not be left to a script
 # example of calling a script from somewhere directly without selection
 def execute_script filename
-  script_path = '~/.config/cetus/scripts'
-  script = File.expand_path(File.join(script_path, 'filename'))
-  return unless File.exist? script
+  # script_path = '~/.config/cetus/scripts'
+  script_path = File.join(CONFIG_PATH, 'cetus', 'scripts')
+  script = File.expand_path(File.join(script_path, filename))
+  unless File.exist? script
+    perror "Unable to find #{filename}: #{script}"
+    return
+  end
 
   scripts script
 end
@@ -3316,6 +3335,7 @@ def generators
 
   title = 'Select a generator'
   script_path = '~/.config/cetus/generators'
+  script_path = File.join(CONFIG_PATH, 'cetus', 'generators')
   binding = `find #{script_path} -type f | fzf --prompt="#{title} :"`.chomp
   return if binding.nil? || binding == ''
 
