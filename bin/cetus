@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-19 08:54
+#  Last update: 2019-04-19 09:22
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -452,7 +452,7 @@ def read_directory
   list_files
   # @files = group_directories_first(@files) if @toggles[:group_directories]
   group_directories_first
-  return unless @toggles[:enhanced_mode]
+  return unless cget(:enhanced_mode)
 
   enhance_file_list
   @files = @files.uniq
@@ -502,7 +502,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
     end
   end
 
-  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && @toggles[:ignore_case]
+  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && cget(:ignore_case)
 
   # zsh gives mtime sort with latest first, ruby gives latest last
   sorted_files.reverse! if sorto[0] == 'O'
@@ -527,7 +527,7 @@ end
 # ------------------- create_viewport ------------------ #
 def create_viewport
   @view = if @patt
-            if @toggles[:ignore_case]
+            if cget(:ignore_case)
               @files.grep(/#{@patt}/i)
             else
               @files.grep(/#{@patt}/)
@@ -566,7 +566,7 @@ def print_title
   fl = @view.size
 
   # fix count of entries so separator and enhanced entries don't show up
-  if @toggles[:enhanced_mode]
+  if cget(:enhanced_mode)
     ix = @viewport.index SEPARATOR
     fin = @sta + ix if ix
 
@@ -599,7 +599,7 @@ def status_line
   # Print the filename at the right side of the status line
   # sometimes due to search, there is no file
   if cf
-    if @toggles[:debug_flag]
+    if cget(:debug_flag)
       # XXX this will not work on file basis FIXME
       print_debug_info cf
     else
@@ -611,7 +611,7 @@ def status_line
   # patt and message are together, no gap, why not ? 2019-04-08 -
   if @patt && @patt != ''
     patt = "[/#{@patt}" + ']' # to get unfrozen string
-    patt[-1] = '/i]' if @toggles[:ignore_case]
+    patt[-1] = '/i]' if cget(:ignore_case)
   end
   # bring cursor to start of line
   # add background color
@@ -1350,13 +1350,13 @@ end
 
 # put directories first, then files
 def group_directories_first
-  return if @options[:group_directories][:current] == :none
+  return if cget(:group_directories) == :none
 
   files = @files
   dirs = files.select { |f| File.directory?(f) }
   # earlier I had File? which removed links, esp dead ones
   fi   = files.reject { |f| File.directory?(f) }
-  @files = if @options[:group_directories][:current] == :first
+  @files = if cget(:group_directories) == :first
              dirs + fi
            else
              fi + dirs
@@ -1703,17 +1703,7 @@ def toggle_menu
     return
   end
 
-  if @toggles.key? menu_text
-    toggle_value menu_text
-    rescan_required
-    return
-  end
-
-  if @options.key? menu_text
-    rotate_value menu_text
-    rescan_required
-    return
-  end
+  cset menu_text
 end
 
 def toggle_columns
@@ -1742,7 +1732,7 @@ end
 
 def toggle_long_listing
   toggle_value :long_listing
-  @long_listing = @toggles[:long_listing]
+  @long_listing = cget(:long_listing)
   if @long_listing
     @saved_gviscols = @gviscols
     @gviscols = 1
@@ -1760,6 +1750,7 @@ def toggle_long_listing
   rescan_required
 end
 
+# ----------------- flag related functions -----------------------------------#
 # toggles the value of a toggle flag, also setting the variable if defined
 # WARN: be careful of variable being set directly. Replace such vars one by one.
 def toggle_value flag
@@ -1774,8 +1765,9 @@ def toggle_value flag
 end
 
 def cycle_value symb
+  raise "unused cycle_value"
   curr = @cycles[symb] # get current value
-  index = @enums[symb].index(curr)
+  index = @enums[symb].index(curr) || 0
   index += 1
   index = 0 if index >= @enums[symb].count
   @cycles[symb] = @enums[symb][index]
@@ -1783,7 +1775,7 @@ def cycle_value symb
 end
 
 def rotate_value symb
-  curr = @options[symb][:current] # get current value
+  curr = cget(symb) # get current value
   index = @options[symb][:values].index(curr) || 0
   index += 1
   index = 0 if index >= @options[symb][:values].count
@@ -1792,6 +1784,31 @@ def rotate_value symb
   instance_variable_set "@#{var}", x if var
   message "#{symb} is set to #{@options[symb][:current]}. "
 end
+
+def cget symb
+  return @toggles[symb] if @toggles.key? symb
+  return @options[symb][:current] if @options.key? symb
+
+  @log.warn "CGET: #{symb} does not exist. Please check code."
+  raise ArgumentError, "CGET: #{symb} does not exist. Please check code."
+end
+
+def cset symb
+  if @toggles.key? symb
+    toggle_value symb
+    rescan_required
+    return true
+  end
+  if @options.key? symb
+    rotate_value symb
+    rescan_required
+    return true
+  end
+
+  @log.warn "CSET: #{symb} does not exist. Please check code."
+  raise ArgumentError, "CSET: #{symb} does not exist. Please check code."
+end
+# ----------------- end of flag related functions ----------------------------#
 
 def order_menu
   # zsh o = order, O = reverse order
@@ -3410,7 +3427,7 @@ end
 # latest source, but in some cases even this can be misleading since running a program accesses
 # include files.
 def enhance_file_list
-  return unless @toggles[:enhanced_mode]
+  return unless cget(:enhanced_mode)
 
   begin
     actr = @files.size
@@ -3710,7 +3727,7 @@ def only_cursor_moved?
   end
 
   # we may want to print debug info if flag is on
-  if @toggles[:debug_flag]
+  if cget(:debug_flag)
     clear_last_line
     print_debug_info
   else
