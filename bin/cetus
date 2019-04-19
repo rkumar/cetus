@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-19 09:22
+#  Last update: 2019-04-19 09:51
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -1753,6 +1753,7 @@ end
 # ----------------- flag related functions -----------------------------------#
 # toggles the value of a toggle flag, also setting the variable if defined
 # WARN: be careful of variable being set directly. Replace such vars one by one.
+# NOTE: please use cset
 def toggle_value flag
   @toggles[flag] = !@toggles[flag]
   #  TODO: 2019-04-16 - can we set a variable so we don't have to check
@@ -1764,16 +1765,8 @@ def toggle_value flag
   message "#{flag} is set to #{@toggles[flag]}"
 end
 
-def cycle_value symb
-  raise "unused cycle_value"
-  curr = @cycles[symb] # get current value
-  index = @enums[symb].index(curr) || 0
-  index += 1
-  index = 0 if index >= @enums[symb].count
-  @cycles[symb] = @enums[symb][index]
-  message "#{symb} is set to #{@cycles[symb]}"
-end
-
+# rotates the value of an option that has multiple values
+# NOTE: please use cset
 def rotate_value symb
   curr = cget(symb) # get current value
   index = @options[symb][:values].index(curr) || 0
@@ -1785,6 +1778,9 @@ def rotate_value symb
   message "#{symb} is set to #{@options[symb][:current]}. "
 end
 
+# get the value of a flag given the symbol.
+# NOTE: use this rather than access the hashes directly, since changes in structure
+#  may happen
 def cget symb
   return @toggles[symb] if @toggles.key? symb
   return @options[symb][:current] if @options.key? symb
@@ -1793,6 +1789,7 @@ def cget symb
   raise ArgumentError, "CGET: #{symb} does not exist. Please check code."
 end
 
+# toggles or rotates the value of a flag
 def cset symb
   if @toggles.key? symb
     toggle_value symb
