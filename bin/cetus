@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-18 23:35
+#  Last update: 2019-04-19 08:54
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -36,7 +36,7 @@ require 'logger'
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.37.0'
+VERSION = '0.1.38.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -446,9 +446,10 @@ def read_directory
   # -r Ignore the escape conventions of echo.
   # zshglob M = MARK_DIRS
 
-  @filterstr ||= 'M'
+  @filterstr ||= 'M' # XXX can we remove from here
   # @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}#{@filterstr})'`.split("\n")
-  @files = list_files
+  # @files = list_files
+  list_files
   # @files = group_directories_first(@files) if @toggles[:group_directories]
   group_directories_first
   return unless @toggles[:enhanced_mode]
@@ -508,7 +509,8 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
 
   # add slash to directories
   sorted_files = add_slash sorted_files
-  return sorted_files
+  # return sorted_files
+  @files = sorted_files
 end
 # ------------- end of read_directory --------------------------------#
 
@@ -1354,7 +1356,7 @@ def group_directories_first
   dirs = files.select { |f| File.directory?(f) }
   # earlier I had File? which removed links, esp dead ones
   fi   = files.reject { |f| File.directory?(f) }
-  @files = if @options[:group_directories][:current]== :first
+  @files = if @options[:group_directories][:current] == :first
              dirs + fi
            else
              fi + dirs
@@ -2461,10 +2463,15 @@ def copy_file
   refresh
 end
 
+# generate a unique filename by adding a zero padded number prior to the extension.
+# This is used only during copy operation.
 def get_unique_file_name fname
   100.times do |i|
     suffix = "%03d" % i
-    f = fname + '.' + suffix
+    extn = File.extname(fname)
+    base = File.basename(fname, extn)
+    # f = fname + '.' + suffix
+    f = base + suffix + extn
     return f unless File.exist?(f)
   end
 
@@ -3283,6 +3290,7 @@ def execute_script filename
   scripts script
 end
 
+# maybe do this internally
 def create_dir_with_selection
   execute_script 'create_dir_with_selection'
 end
