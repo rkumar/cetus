@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-19 10:59
+#  Last update: 2019-04-20 14:42
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -64,7 +64,7 @@ CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
   ':' => 'subcommand',
   "'" => 'goto_bookmark',
   '"' => 'file_starting_with',
-  '/' => 'enter_regex',
+  '/' => 'ask_regex',
   'M-p' => 'prev_page',
   'M-n' => 'next_page',
   'PgUp' => 'prev_page',
@@ -229,7 +229,7 @@ end
 def readline prompt='>'
   clear_last_line
   print "\r"
-  # do we need to clear till end of line, see enter_regex commented
+  # do we need to clear till end of line, see ask_regex commented
   # unhide cursor
   print "\e[?25h"
   system 'stty echo'
@@ -332,7 +332,7 @@ PAGER_COMMAND = {
   unknown: 'open'
 }.freeze
 @dir_position = {}
-@movement = @old_cursor = nil # cursor movement has happened only, don't repaint
+@cursor_movement = @old_cursor = nil # cursor movement has happened only, don't repaint
 ## FLAGS
 @multiple_selection = true # single select
 @group_dirs = true
@@ -676,8 +676,6 @@ def redraw flag=false
 end
 
 def draw_directory
-  # all this seems to be happening for each keystroke even if
-  # not really required. FIXME maybe reduce and call when required
 
   # view consists of all files (filtered by pattern if necessary)
   # viewport is only that subset of view that is displayed on screen
@@ -765,6 +763,8 @@ def resolve_key key
   ret = true
   clear_message
 
+  return true if search_as_you_type(key)
+
   if key.match?(/^[a-pr-zZ]$/)
     # hint mode
     ret = select_hint @viewport, key
@@ -810,6 +810,37 @@ def resolve_numeric_key key
 
   set_bookmark key
   message "Created bookmark #{key}."
+end
+
+def search_as_you_type key
+  return false unless @searching
+
+  if key == 'ENTER' || key == 'TAB' || key == 'ESCAPE'
+    @searching = false
+    redraw_required false
+    @mode = 'NORM'
+    message 'Exiting instant search.  Press ESCAPE to return to listing. '
+    return true
+  end
+
+  @patt = @patt[0..-2] if key == 'BACKSPACE' && @patt
+
+  # # returning false allows these keys to be processed
+  # return false unless key.match?(/^[a-zA-Z0-9\. _]$/)
+  # returning true means that these keys will be ignored
+  unless key.match?(/^[a-zA-Z0-9\. _]$/)
+    # only_cursor_moved # misleading since no movement happened. But we don't want repaint.
+    redraw_required false
+    return true
+  end
+
+  @mode = 'INST'
+  @title = 'Search results:'
+  @patt ||= '' + '' # rubocop suggestion to get unfrozen string
+  @patt += key
+  message "#{@patt} : #{key}"
+
+  return true
 end
 
 def set_bookmark key, dir=Dir.pwd
@@ -1348,6 +1379,7 @@ def escape
   @viewctr = 0
   @title = nil
   @filterstr = 'M'
+  @searching = false
   @message = nil
   visual_block_clear
   refresh
@@ -1478,11 +1510,11 @@ def goto_bookmark key=nil
 end
 
 ## take regex from user, to run on files on screen, user can filter file names
-def enter_regex
-  # print 'Enter (regex) pattern: '
-  # move to beginning of line, and clear till EOL
-  # print "\r\e[K"
-  @patt = readline '/'
+def ask_regex
+  # @patt = readline '/'
+  # FIXME: this is temporarily done. need to use a key or toggle to start this
+  message 'searching instantly'
+  @searching = true
 end
 
 # page/scroll down.
@@ -1984,7 +2016,6 @@ def filter_menu
     @files = files
     @stact = 0
     @message = "Filtered on #{menu_text}. Press ESC to return."
-    # redraw
   else
     perror 'Sorry, No files. '
     @title = nil
@@ -2011,7 +2042,6 @@ def select_from_used_dirs
   @title = 'Used Directories'
   home = File.expand_path '~'
   @files = @used_dirs.uniq.map { |path| path.sub(home.to_s, '~') }
-  # redraw
 end
 
 def select_from_visited_files
@@ -2019,7 +2049,6 @@ def select_from_visited_files
   @title = 'Visited Files'
   home = File.expand_path '~'
   @files = @visited_files.uniq.map { |path| path.sub(home.to_s, '~') }
-  # redraw
 end
 
 # maybe unused ??? XXX
@@ -2123,7 +2152,6 @@ def create_bookmark
   else
     perror 'Bookmark must be alpha character or number.'
   end
-  # redraw
 end
 
 # allow user to exit using :q :wq :x
@@ -2176,7 +2204,6 @@ def subcommand
   else
     perror "Don't know about command #{command}. Try :h or :help"
   end
-  # redraw
 end
 
 def quit_command
@@ -2201,7 +2228,6 @@ def views
   @viewctr = 0 if @viewctr > views.size
 
   @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}M)'`.split("\n")
-  # redraw
 end
 
 def child_dirs
@@ -2210,7 +2236,6 @@ def child_dirs
   # @files = `zsh -c 'print -rl -- *(/#{@sorto}#{@hidden}M)'`.split("\n")
   @files = dirs
   message "#{@files.size} directories."
-  # redraw
 end
 
 def dirs dir='*'
@@ -2231,7 +2256,6 @@ def dirtree
   # files1 = `zsh -c 'print -rl -- **/*(/#{@sorto}#{@hidden}M)'`.split("\n")
   @files = Dir['**/']
   message "#{@files.size} files."
-  # redraw
 end
 
 #
@@ -2243,7 +2267,6 @@ def tree
   # @files = `zsh -c 'print -rl -- **/*(#{@sorto}#{@hidden}M)'`.split("\n")
   @files = Dir['**/*']
   message "#{@files.size} files."
-  # redraw
 end
 
 # lists recent files in current dir
@@ -2254,7 +2277,6 @@ def recent_files
   # zsh D DOT_GLOB, show dot files
   # zsh om order on modification time
   @files = `zsh -c 'print -rl -- **/*(Dom[1,15])'`.split("\n").reject { |f| f[0] == '.' }
-  # redraw
 end
 
 def select_current
@@ -2715,7 +2737,6 @@ def column_next direction=0
     # We are trying to maintain offset
     @cursor += @grows if @cursor < 0
   end
-  # redraw
 end
 
 # currently i am only passing the action in from the list there as a key
@@ -2914,7 +2935,6 @@ def ag
     return
   end
   @files = files
-  # redraw
 end
 
 def ffind
@@ -2930,7 +2950,6 @@ def ffind
   else
     @files = files
   end
-  # redraw
 end
 
 def locate
@@ -2946,7 +2965,6 @@ def locate
   else
     @files = files
   end
-  # redraw
 end
 
 ##  takes directories from the z program, if you use autojump you can
@@ -2963,7 +2981,6 @@ def z_interface
   @files.collect! do |f|
     f.sub(/#{home}/, '~')
   end
-  # redraw
 end
 
 def vidir
@@ -2976,25 +2993,25 @@ end
 
 ## scroll cursor down
 def cursor_scroll_dn
-  @movement = :down
+  @cursor_movement = :down
   moveto(pos + MSCROLL)
 end
 
 def cursor_scroll_up
-  @movement = :up
+  @cursor_movement = :up
   moveto(pos - MSCROLL)
 end
 
 # move cursor down a line
 def cursor_dn
-  @movement = :down
+  @cursor_movement = :down
   @old_cursor = @cursor
   moveto(pos + 1)
 end
 
 def cursor_up
   @old_cursor = @cursor
-  @movement = :up
+  @cursor_movement = :up
   moveto(pos - 1)
 end
 
@@ -3012,8 +3029,8 @@ def moveto position
 
   # try to stop it from landing on separator
   if current_file == SEPARATOR
-    @cursor += 1 if @movement == :down
-    @cursor -= 1 if @movement == :up
+    @cursor += 1 if @cursor_movement == :down
+    @cursor -= 1 if @cursor_movement == :up
     return
   end
 
@@ -3032,13 +3049,13 @@ def moveto position
     # @sta = @cursor
   end
 
-  @movement = nil if oldsta != @sta # we need to redraw
+  @cursor_movement = nil if oldsta != @sta # we need to redraw
 
   star = [orig, @cursor].min
   fin = [orig, @cursor].max
   return unless @visual_mode
 
-  @movement = nil # visual mode needs to redraw page
+  @cursor_movement = nil # visual mode needs to redraw page
 
   # PWD has to be there in selction
   if selected? current_file
@@ -3052,8 +3069,6 @@ def moveto position
     add_to_selection @view[star..fin]
   end
   message "#{@selected_files.count} files selected.   "
-  # ensure
-  # redraw
 end
 # --
 
@@ -3733,12 +3748,12 @@ end
 # returns true if only cursor moved and redrawing not required
 def only_cursor_moved?
   # only movement has happened within this page, don't redraw
-  return unless @movement && @old_cursor
+  return unless @cursor_movement && @old_cursor
 
   # if cursor has not moved (first or last item on screen)
   # keep testing this out 2019-04-14 -
   if @old_cursor == @cursor
-    @movement = false
+    @cursor_movement = false
     return true # next in the loop
   end
 
@@ -3751,8 +3766,13 @@ def only_cursor_moved?
   end
 
   place_cursor
-  @movement = false
+  @cursor_movement = false
   return true # next in the loop
+end
+
+# indicate that only cursor moved, so don't redraw or rescan
+def only_cursor_moved flag=true
+  @cursor_movement = flag
 end
 
 # main loop which calls all other programs
@@ -3770,7 +3790,7 @@ def run
   redraw true
   place_cursor
 
-  # do we need this, have they changed after redraw
+  # do we need this, have they changed after redraw XXX
   @patt = nil
   @sta = 0
 
@@ -3783,12 +3803,15 @@ def run
       next
     end
 
+    break if @quitting
+
     next if only_cursor_moved?
+
+    next unless @redraw_required # no change, or ignored key
 
     redraw rescan?
     place_cursor
 
-    break if @quitting
   end
   write_curdir
   puts 'bye'
