@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-21 12:03
+#  Last update: 2019-04-21 23:42
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -815,72 +815,68 @@ def resolve_numeric_key key
   message "Created bookmark #{key}."
 end
 
+IGNORE_KEY = true
+PROCESS_KEY = false
+
+# Display search results as user types search pattern.
+# returning false allows these keys to be processed
+# returning true means that these keys will be ignored
 def search_as_you_type key
   return false unless @searching
 
-  ignore_key = true
-  process_key = false
+  # @log.info "sayt: #{key}, patt: #{@patt}"
 
-  @log.info "sayt: #{key}, patt: #{@patt}"
-
-  # todo arrow keys should not gte out of search don't nil patt
   # escape should nil patt and come out of search.
   if key == 'ESCAPE'
-    @searching = false
-    @mode = nil
-    @title = @patt = nil
-    @log.info "INST returning true with #{key}"
-    status_line
-    return ignore_key
+    exit_search
+    return IGNORE_KEY
   end
-  if key == 'ENTER' || key == 'TAB'
+
+  # We exit the search but screen shows search results.
+  if key == 'ENTER' # || key == 'TAB'
     @searching = false
     redraw_required true # ??? any effect ?
     @mode = 'NORM'
     # nilifying patt means we will not see searched results. we want to stay there.
-    # @patt = nil
-    @title = "Search Results (ESCAPE to return)"
-    # TODO at this point pressing q should return just like ESC
-    # this won't show up since no redraw
-    message ' Press ESCAPE to return to listing. '
-    @log.info "returning true with #{key}"
+    @title = 'Search Results (ESCAPE to return)'
+    message ' '
     status_line
-    return ignore_key
+    return IGNORE_KEY
   end
 
   if key == 'BACKSPACE' && @patt
     @patt = @patt[0..-2]
-    return ignore_key
+    exit_search if @patt == ''
+    return IGNORE_KEY
   end
 
+  # XXX should not changing directory cancel the search ?
   if key == 'UP' || key == 'DOWN' || key == 'RIGHT' || key == 'LEFT'
-    return process_key
+    return PROCESS_KEY
   end
 
-  # # returning false allows these keys to be processed
-  # return false unless key.match?(/^[a-zA-Z0-9\. _]$/)
-  # returning true means that these keys will be ignored
+  # if key is not one of allowed keys, then cancel the search.
+  # No, we allow it as in toggle or menu ?
   unless key.match?(/^[a-zA-Z0-9\. _]$/)
-    @searching = false
-    # redraw_required false
-    redraw_required true
-    @mode = 'NORM'
-    # making patt nil means we will be back to unfiltered list
-    @patt = @title = nil
-    message "Exiting ..#{key}"
-    @log.info "returning false with #{key}"
-    status_line
-    return process_key
+    # exit_search
+    # @mode = @title = nil
+    # redraw_required true
+    return PROCESS_KEY
   end
 
   @mode = 'INST'
-  @title = 'Search results:'
+  @title = 'Search results: Use ENTER to return, ESCAPE to cancel.'
   @patt ||= '' + '' # rubocop suggestion to get unfrozen string
   @patt += key
-  message "#{@patt} : #{key}"
+  message "> #{@patt}         "
   redraw_required true
 
-  return ignore_key
+  return IGNORE_KEY
+end
+
+def exit_search
+  @searching = @mode = @title = @patt = nil
+  status_line
 end
 
 def set_bookmark key, dir=Dir.pwd
