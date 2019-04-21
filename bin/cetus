@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-21 23:46
+#  Last update: 2019-04-22 00:16
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -470,7 +470,7 @@ def read_directory
   list_files
   # @files = group_directories_first(@files) if @toggles[:group_directories]
   group_directories_first
-  return unless cget(:enhanced_mode)
+  return unless cget(:enhanced_mode) # critical_path FIXME
 
   enhance_file_list
   @files = @files.uniq
@@ -520,6 +520,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
     end
   end
 
+  # FIXME critical_path
   sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && cget(:ignore_case)
 
   # zsh gives mtime sort with latest first, ruby gives latest last
@@ -545,7 +546,7 @@ end
 # ------------------- create_viewport ------------------ #
 def create_viewport
   @view = if @patt
-            if cget(:ignore_case)
+            if cget(:ignore_case) # critical_path FIXME
               @files.grep(/#{@patt}/i)
             else
               @files.grep(/#{@patt}/)
@@ -617,7 +618,7 @@ def status_line
   # Print the filename at the right side of the status line
   # sometimes due to search, there is no file
   if cf
-    if cget(:debug_flag)
+    if cget(:debug_flag) # FIXME critical_path
       # XXX this will not work on file basis FIXME
       print_debug_info cf
     else
@@ -629,7 +630,7 @@ def status_line
   # patt and message are together, no gap, why not ? 2019-04-08 -
   if @patt && @patt != ''
     patt = "[/#{@patt}" + ']' # to get unfrozen string
-    patt[-1] = '/i]' if cget(:ignore_case)
+    patt[-1] = '/i]' if cget(:ignore_case) # FIXME critical_path
   end
   # bring cursor to start of line
   # add background color
@@ -814,6 +815,42 @@ def resolve_numeric_key key
 
   set_bookmark key
   message "Created bookmark #{key}."
+end
+
+# v2 if search_as_you_type which takes keyboard control
+# This is fairly straightforward and took only a few minutes to get done.
+def sayt2
+
+  # have a lopp in which key is taken
+  # exit if ENTER or ESCAPE or if some other key
+  # otherwise call draw dir
+  #
+  @patt = '' + '' # rubocop suggestion to get unfrozen string
+  @title = 'Search Results (ENTER to return, ESC to cancel)'
+  clear_last_line
+  print "\r/ "
+  loop do
+    key = get_char
+    if key == 'ENTER'
+      @title = 'Search Results (ESCAPE to return)'
+      return true
+    elsif key == 'ESCAPE'
+      exit_search
+      return false
+    elsif key == 'BACKSPACE'
+      @patt = @patt[0..-2]
+    # elsif key == 'UP' || key == 'DOWN'
+      # TODO
+    elsif key.match?(/^[a-zA-Z0-9\. _]$/)
+      @patt += key
+    else
+      resolve_key key
+    end
+    # XXX is rescan required ?
+    draw_directory
+    place_cursor
+  end
+
 end
 
 IGNORE_KEY = true
@@ -1433,7 +1470,7 @@ end
 
 # put directories first, then files
 def group_directories_first
-  return if cget(:group_directories) == :none
+  return if cget(:group_directories) == :none # FIXME critical_path
 
   files = @files
   dirs = files.select { |f| File.directory?(f) }
@@ -1549,6 +1586,8 @@ end
 
 ## take regex from user, to run on files on screen, user can filter file names
 def ask_regex
+  sayt2
+  return
   unless cget(:instant_search)
     @log.info "Inside ask_regex readline."
     @patt = readline '/'
@@ -3813,6 +3852,7 @@ def only_cursor_moved?
   end
 
   # we may want to print debug info if flag is on
+  # TODO check directly this is in critical path
   if cget(:debug_flag)
     clear_last_line
     print_debug_info
