@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-22 09:43
+#  Last update: 2019-04-22 12:37
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -40,7 +40,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.40.0'
+VERSION = '0.1.41.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -467,6 +467,7 @@ end
 
 # return a list of directory contents sorted as per sort order
 # NOTE: FNM_CASEFOLD does not work with Dir.glob
+# XXX _filter unused.
 def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
   dir += '/*' if File.directory?(dir)
   dir = dir.gsub('//', '/')
@@ -601,7 +602,7 @@ def status_line
   # prompt
   v_mm = @mode ? "[#{@mode}] " : ''
   cf = current_file
-  @message = ' | No matches. Press ESCAPE' if @patt && !cf
+  @message = " | No matches. Press ESCAPE " if @patt && !cf
 
   clear_last_line
 
@@ -750,30 +751,27 @@ def tput_cup row, col
   print "\e[#{row + 3};#{col + 1}H"
 end
 
-# FIXME flag is unused ???? XXX
 def redraw_required flag=true
   @redraw_required = flag
 end
 
+# return value determines if screen is redrawn or not.
 def resolve_key key
-  ret = true
   clear_message
 
-  return true if search_as_you_type(key)
+  # hint mode, pick file based on shortcut
+  return select_hint(@viewport, key) if key.match?(/^[a-pr-zZ]$/)
 
-  if key.match?(/^[a-pr-zZ]$/)
-    # hint mode
-    ret = select_hint @viewport, key
+  if '0123456789'.include?(key)
+    resolve_numeric_key(key)
   elsif key == 'BACKSPACE'
     @patt = @patt[0..-2] if @patt && !@patt.empty?
     @message = @patt = nil if @patt == ''
     @title = nil unless @patt
-  elsif '0123456789'.include? key
-    resolve_numeric_key key
   else
     resolve_binding key
   end
-  ret
+  true
 end
 
 def resolve_binding key
@@ -810,102 +808,37 @@ end
 
 # v2 if search_as_you_type which takes keyboard control
 # This is fairly straightforward and took only a few minutes to get done.
-def sayt2
+# return value is not used.
+def search_as_you_type
 
-  # have a lopp in which key is taken
-  # exit if ENTER or ESCAPE or if some other key
-  # otherwise call draw dir
-  #
   @patt = '' + '' # rubocop suggestion to get unfrozen string
   @title = 'Search Results (ENTER to return, ESC to cancel)'
   clear_last_line
-  print "\r/ "
+  print "\r/"
   loop do
     key = get_char
     if key == 'ENTER'
       @title = 'Search Results (ESCAPE to return)'
       return true
     elsif key == 'ESCAPE'
-      exit_search
+      @mode = @title = @patt = nil
+      status_line
       return false
     elsif key == 'BACKSPACE'
       @patt = @patt[0..-2]
-    # elsif key == 'UP' || key == 'DOWN'
-      # TODO
+      @message = nil # remove pesky ESCAPE message
     elsif key.match?(/^[a-zA-Z0-9\. _]$/)
-      @patt += key
+      @patt += key if @patt
     else
       resolve_key key
+      @mode = @title = nil
+      # if directory changes, then patt is nilled causing error above
+      return true
     end
     # XXX is rescan required ?
     draw_directory
     place_cursor
   end
-
-end
-
-IGNORE_KEY = true
-PROCESS_KEY = false
-
-# Display search results as user types search pattern.
-# returning false allows these keys to be processed
-# returning true means that these keys will be ignored
-def search_as_you_type key
-  return false unless @searching
-
-  # @log.info "sayt: #{key}, patt: #{@patt}"
-
-  # escape should nil patt and come out of search.
-  if key == 'ESCAPE'
-    exit_search
-    return IGNORE_KEY
-  end
-
-  # We exit the search but screen shows search results.
-  if key == 'ENTER' # || key == 'TAB'
-    @searching = false
-    redraw_required true # ??? any effect ?
-    @mode = 'NORM'
-    # nilifying patt means we will not see searched results. we want to stay there.
-    @title = 'Search Results (ESCAPE to return)'
-    message ' '
-    status_line
-    return IGNORE_KEY
-  end
-
-  if key == 'BACKSPACE' && @patt
-    @patt = @patt[0..-2]
-    exit_search if @patt == ''
-    return IGNORE_KEY
-  end
-
-  # XXX should not changing directory cancel the search ?
-  if key == 'UP' || key == 'DOWN' || key == 'RIGHT' || key == 'LEFT'
-    return PROCESS_KEY
-  end
-
-  # if key is not one of allowed keys, then cancel the search.
-  # No, we allow it as in toggle or menu ?
-  unless key.match?(/^[a-zA-Z0-9\. _]$/)
-    # exit_search
-    # @mode = @title = nil
-    # redraw_required true
-    return PROCESS_KEY
-  end
-
-  @mode = 'INST'
-  @title = 'Search results: Use ENTER to return, ESCAPE to cancel.'
-  @patt ||= '' + '' # rubocop suggestion to get unfrozen string
-  @patt += key
-  message "> #{@patt}         "
-  redraw_required true
-
-  return IGNORE_KEY
-end
-
-def exit_search
-  @searching = @mode = @title = @patt = nil
-  status_line
 end
 
 def set_bookmark key, dir=Dir.pwd
@@ -1444,7 +1377,6 @@ def escape
   @viewctr = 0
   @title = nil
   @filterstr = 'M'
-  @searching = false
   @message = nil
   @mode = nil
   visual_block_clear
@@ -1578,22 +1510,13 @@ end
 
 ## take regex from user, to run on files on screen, user can filter file names
 def ask_regex
-  sayt2
-  return
-  unless cget(:instant_search)
-    @log.info "Inside ask_regex readline."
+  @title = 'Search Results: (Press Escape to cancel)'
+  @mode = 'SEARCH'
+  if cget(:instant_search)
+    search_as_you_type
+  else
     @patt = readline '/'
-    @title = 'Search Results: (Press Escape to return)'
-    @mode = 'SEARCH'
-    return
   end
-
-  # this is the instant search as you type thingie
-  @patt = nil
-  @log.info "Inside ask_regex instant."
-  message 'I/'
-  @searching = true
-  status_line
 end
 
 # page/scroll down.
@@ -1631,11 +1554,12 @@ def print_help
     file.puts '    HELP'
 
     file.puts
-    file.puts 'To open a file or dir press 1-9 a-z A-Z (on left of file)'
-    file.puts 'Ctrl-s to select file under cursor'
-    file.puts 'Selection Mode: Each selection adds to selection list (toggles)'
-    file.puts '   Execute commands on selected files. e.g D C-x   '
-    file.puts '   Upon exiting mode, selection is cleared'
+    file.puts 'To open a file or dir, press a-z A-Z (shortcut on left of file)'
+    file.puts 'Ctrl-s to select file under cursor. * for multiple select.'
+    file.puts 'Ctrl-Space: Enter and exit Visual Selection mode'
+    file.puts 'Ctrl-x: file actions for selected files, or file under cursor'
+    file.puts '1-9: bookmark a dir, and go to it.'
+
     file.puts 'Use left and right arrows to move through directories'
     file.puts
     ary = []
@@ -1658,6 +1582,25 @@ def page_stat_for_file
 
   page_with_tempfile do |file|
     file.puts stat
+  end
+end
+
+# display values of flag and options in pager
+def page_flags
+  # XXX once this is changed to an array, then remove 'keys'
+  page_with_tempfile do |file|
+    file.puts 'Values of toggles/flags'
+    file.puts '-----------------------'
+    @toggles.keys.each do |flag|
+      value = instance_variable_get "@#{flag}"
+      file.puts "#{flag} : #{value}"
+    end
+    file.puts '-----------------------'
+    @options.each_pair do |flag, struc|
+      var = struc[:var]
+      value = instance_variable_get "@#{var}"
+      file.puts "#{flag} : #{value}"
+    end
   end
 end
 
@@ -2037,12 +1980,13 @@ end
 def extras
   h = { '1' => :one_column,
         '2' => :multi_column,
-        :c => :columns,
+        c: :columns,
         s: :scripts,
         g: :generators,
-        :B => :bindkey_ext_command,
-        :r => :config_read,
-        :w => :config_write }
+        B: :bindkey_ext_command,
+        f: :page_flags,
+        r: :config_read,
+        w: :config_write }
   key, menu_text = menu 'Extras Menu', h
   case menu_text
   when :one_column
