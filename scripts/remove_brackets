@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Remove brackets and quotes from filenames
+# replaces space with underscore
+IFILE=~/tmp/selected_files
+if [[ -f $IFILE ]]; then
+  wc -l $IFILE
+else
+  echo "No files selected."
+  exit 1
+fi
+
+while IFS= read -r file
+do
+  NEWNAME=$( echo "$file" | tr ' ' '_' | tr -d "[]()\"'")
+  [ -f "$file" ] && mv "$file" "$NEWNAME"
+done < "$IFILE"
