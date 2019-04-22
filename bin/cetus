@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-22 00:16
+#  Last update: 2019-04-22 09:43
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -20,6 +20,7 @@
 # 2019-03-04 - first dirs then files
 # 2019-03-22 - refactoring the code, esp run()
 # 2019-04-21 - search_as_you_type
+# 2019-04-22 - new search_as_you_type
 #  == TODO
 
 require 'readline'
@@ -39,7 +40,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.1.39.0'
+VERSION = '0.1.40.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -338,7 +339,7 @@ PAGER_COMMAND = {
 @cursor_movement = @old_cursor = nil # cursor movement has happened only, don't repaint
 ## FLAGS
 @multiple_selection = true # single select
-@group_dirs = true
+@group_directories = :first
 # truncate long filenames from :right, :left or :center.
 @truncate_from = :center
 @filename_status_line = true
@@ -346,6 +347,7 @@ PAGER_COMMAND = {
 @selected_files_fullpath_flag = false
 @selected_files_escaped_flag = false
 @keys_to_clear = nil
+@ignore_case = true
 
 # See toggle_value
 # we need to set these on startup
@@ -365,16 +367,10 @@ PAGER_COMMAND = {
   toggle_filename_status_line: true,
   instant_search: true
 }
-# @cycles = { truncate_from: :center,
-            # show_hidden: nil }
-# @enums = {
-  # truncate_from: %i[left right center],
-  # show_hidden: [nil, 'D']
-# }
 # var is name of variable to be set
 @options = {
   truncate_from: { current: :center, values: %i[left right center], var: :truncate_from },
-  group_directories: { current: :first, values: %i[first none last] },
+  group_directories: { current: :first, values: %i[first none last], var: :group_directories },
   show_hidden: { current: nil, values: [nil, 'D'], var: :hidden }
 }
 
@@ -458,19 +454,12 @@ CURSOR_COLOR = REVERSE
 def read_directory
   rescan_required false
 
-  # http://zsh.sourceforge.net/Doc/Release/Shell-Builtin-Commands.html
-  # zsh print -rl
-  # -l Print the arguments separated by newlines instead of spaces.
-  # -r Ignore the escape conventions of echo.
-  # zshglob M = MARK_DIRS
-
   @filterstr ||= 'M' # XXX can we remove from here
-  # @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}#{@filterstr})'`.split("\n")
-  # @files = list_files
   list_files
-  # @files = group_directories_first(@files) if @toggles[:group_directories]
+
   group_directories_first
-  return unless cget(:enhanced_mode) # critical_path FIXME
+  # return unless cget(:enhanced_mode)
+  return unless @enhanced_mode
 
   enhance_file_list
   @files = @files.uniq
@@ -520,8 +509,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
     end
   end
 
-  # FIXME critical_path
-  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && cget(:ignore_case)
+  sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && @ignore_case
 
   # zsh gives mtime sort with latest first, ruby gives latest last
   sorted_files.reverse! if sorto[0] == 'O'
@@ -546,7 +534,8 @@ end
 # ------------------- create_viewport ------------------ #
 def create_viewport
   @view = if @patt
-            if cget(:ignore_case) # critical_path FIXME
+            # if cget(:ignore_case)
+            if @ignore_case
               @files.grep(/#{@patt}/i)
             else
               @files.grep(/#{@patt}/)
@@ -585,7 +574,8 @@ def print_title
   fl = @view.size
 
   # fix count of entries so separator and enhanced entries don't show up
-  if cget(:enhanced_mode)
+  # if cget(:enhanced_mode)
+  if @enhanced_mode
     ix = @viewport.index SEPARATOR
     fin = @sta + ix if ix
 
@@ -618,8 +608,8 @@ def status_line
   # Print the filename at the right side of the status line
   # sometimes due to search, there is no file
   if cf
-    if cget(:debug_flag) # FIXME critical_path
-      # XXX this will not work on file basis FIXME
+    # if cget(:debug_flag)
+    if @debug_flag
       print_debug_info cf
     else
       # print_on_right "#{Dir.pwd}"
@@ -630,7 +620,8 @@ def status_line
   # patt and message are together, no gap, why not ? 2019-04-08 -
   if @patt && @patt != ''
     patt = "[/#{@patt}" + ']' # to get unfrozen string
-    patt[-1] = '/i]' if cget(:ignore_case) # FIXME critical_path
+    # patt[-1] = '/i]' if cget(:ignore_case)
+    patt[-1] = '/i]' if @ignore_case
   end
   # bring cursor to start of line
   # add background color
@@ -1470,13 +1461,14 @@ end
 
 # put directories first, then files
 def group_directories_first
-  return if cget(:group_directories) == :none # FIXME critical_path
+  # return if cget(:group_directories) == :none
+  return if @group_directories == :none
 
   files = @files
   dirs = files.select { |f| File.directory?(f) }
   # earlier I had File? which removed links, esp dead ones
   fi   = files.reject { |f| File.directory?(f) }
-  @files = if cget(:group_directories) == :first
+  @files = if @group_directories == :first
              dirs + fi
            else
              fi + dirs
@@ -3552,7 +3544,8 @@ end
 # latest source, but in some cases even this can be misleading since running a program accesses
 # include files.
 def enhance_file_list
-  return unless cget(:enhanced_mode)
+  # return unless cget(:enhanced_mode)
+  return unless @enhanced_mode
 
   begin
     actr = @files.size
@@ -3560,11 +3553,6 @@ def enhance_file_list
     # zshglob: M = MARK_DIRS with slash
     # zshglob: N = NULL_GLOB no error if no result, this is causing space to split
     #  file sometimes for single file.
-
-    # FIXME: append only if we are adding.
-    # FIXME: this makes it possible to select this row,
-    # FIXME: and count it as a file !!
-    # @files.append SEPARATOR
 
     # if only one entry and its a dir
     # get its children and maybe the recent mod files a few
@@ -3852,8 +3840,7 @@ def only_cursor_moved?
   end
 
   # we may want to print debug info if flag is on
-  # TODO check directly this is in critical path
-  if cget(:debug_flag)
+  if @debug_flag
     clear_last_line
     print_debug_info
   else
