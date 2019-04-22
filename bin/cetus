@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-22 12:50
+#  Last update: 2019-04-22 15:31
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -348,6 +348,8 @@ PAGER_COMMAND = {
 @selected_files_escaped_flag = false
 @keys_to_clear = nil
 @ignore_case = true
+@highlight_row_flag = true #false
+@debug_flag = false
 
 # See toggle_value
 # we need to set these on startup
@@ -365,7 +367,8 @@ PAGER_COMMAND = {
   selection_mode: false, # typing hint adds to selection, does not open
   debug_flag: false,
   toggle_filename_status_line: true,
-  instant_search: true
+  instant_search: true,
+  highlight_row_flag: false
 }
 # var is name of variable to be set
 @options = {
@@ -700,49 +703,23 @@ end
 # XXX i am not sure how to highlight the bg without rewriting the text.
 # I can get the filename but it has been truncated.
 # I can get the earlier filename but the color has to be determined again.
-# FIXME flinks after paging
-# FIXME color of original hint lost
-def place_cursor
-  # clear_cursor
-  # hint = get_shortcut(@cursor)
+# FIXME color of original hint lost if @highlight_row_flag.
+def place_cursor color=CURSOR_COLOR
+  # FIXME: hint not coming correct on other pages.
+  hint = '?'
+  hint = get_shortcut(@cursor - @sta) if @highlight_row_flag
   c = @cursor - @sta
   if c < @grows
-    # system "tput cup #{c + 2} 0"
-    # print "\e[#{c + 3};0H"
     tput_cup c, 0
-    # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
+    print "#{color}#{hint} #{CLEAR}" if @highlight_row_flag
     return
   end
+
   wid = get_width @viewport.size, @grows
   rows = c % @grows
   cols = (c / @grows) * wid
-  # system "tput cup #{rows + 2} #{cols}"
-  # print "\e[#{rows + 3};#{cols + 1}H"
   tput_cup rows, cols
-  # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
-end
-
-# clear the earlier position when we move.
-# Currently not using until I can implement chgat here.
-def clear_cursor
-  return unless @old_cursor
-
-  hint = get_shortcut(@old_cursor)
-  if @old_cursor < @grows
-    # FIXME: faster way of getting here ? see fff
-    # system "tput cup #{@old_cursor + 2} 0"
-    tput_cup @old_cursor, 0
-    # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
-    print "#{hint}  "
-    return
-  end
-  wid = get_width @viewport.size, @grows
-  rows = @old_cursor % @grows
-  cols = (@old_cursor / @grows) * wid
-  # system "tput cup #{rows + 2} #{cols}"
-  tput_cup rows, cols
-  # print "#{CURSOR_COLOR}#{hint} >#{CLEAR}"
-  print "#{hint}  "
+  print "#{color}#{hint} #{CLEAR}" if @highlight_row_flag
 end
 
 # place cursor on row and col taking first two rows into account
@@ -1591,8 +1568,12 @@ def page_flags
   page_with_tempfile do |file|
     file.puts 'Values of toggles/flags'
     file.puts '-----------------------'
-    @toggles.keys.each do |flag|
-      value = instance_variable_get "@#{flag}"
+    @toggles.each_pair do |flag, v|
+      if instance_variable_defined? "@#{flag}"
+        value = instance_variable_get "@#{flag}"
+      else
+        value = v
+      end
       file.puts "#{flag} : #{value}"
     end
     file.puts '-----------------------'
@@ -3053,6 +3034,7 @@ end
 # move cursor to given position/line
 def move_to position
   orig = @cursor
+  place_cursor(CLEAR) if @highlight_row_flag
   @cursor = position
   @cursor = [@cursor, @view.size - 1].min
   @cursor = [@cursor, 0].max
@@ -3748,18 +3730,11 @@ def print_on_right text
   col = @gcols - sz - 1
   col = 2 if col < 2
   text = text[0..@gcols - 3] if sz > @gcols - 2
-  # system "tput cup #{@glines} #{@gcols - sz - 1}"
-  system "tput cup #{@glines} #{col}"
-  # tput_cup @glines, @gcols - sz - 1
+  # 2019-04-22 - earlier direct system call to tput, now trying print
+  # system "tput cup #{@glines} #{col}"
+  tput_cup @glines, @gcols - sz - 1
   # print text
   print "\e[33;4#{@status_color_right}m#{text}\e[m"
-end
-
-# unused, should set bgcolor before printing
-def print_last_line text
-  # unused ??
-  last_line
-  print text
 end
 
 def clear_message
