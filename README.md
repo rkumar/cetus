@@ -76,6 +76,24 @@ Use the same procedure as for moving files but press `C-x c`
 
 3. If copying a file, to the same directory, or if the file already exists, a unique name will be suggested (numeric suffix).
 
+## Scripts
+
+* Scripts access selected files and can take actions on them. Examples are scripts that remove spaces and brackets from selected files, or create a directory with the selected files, encrypt files, archive files, convert file format using `ffmpeg`, etc.
+
+* Scripts are located in the CONFIG folder, under `cetus/scripts`. Usually this is `.config` but can be configured via XDG_CONFIG_HOME.
+
+* Selected files are located in `~/tmp/selected_files`
+
+* Scripts are also passed the filename under the cursor, and may act on it if no file has been selected.
+
+* Currently, scripts don't pass any messages back to the application. Suggestions welcome.
+
+## Generators
+
+Generators are used to generate a list of file names or directories that can be used for navigation, or paging/editing or other file actions.
+
+For example, a generator could generate filenames from `.viminfo` or `z` or `autojump`
+
 ## More
 
 Fork of `lyra` with a different hotkey idea. Use this for quickly navigating your file system using hotkeys
