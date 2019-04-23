@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-22 15:31
+#  Last update: 2019-04-23 00:07
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -368,7 +368,7 @@ PAGER_COMMAND = {
   debug_flag: false,
   toggle_filename_status_line: true,
   instant_search: true,
-  highlight_row_flag: false
+  highlight_row_flag: @highlight_row_flag
 }
 # var is name of variable to be set
 @options = {
@@ -688,6 +688,7 @@ def draw_directory
 
   # break viewport into as many columns as required
   # This is where directories get their blue color
+  # 2019-04-22 - buf only has ind and mark and cur not filename
   buff = columnate buff, @grows
 
   # starts printing array on line 3
@@ -704,10 +705,19 @@ end
 # I can get the filename but it has been truncated.
 # I can get the earlier filename but the color has to be determined again.
 # FIXME color of original hint lost if @highlight_row_flag.
+# we can even get the filename, but it has been formatted and could
+# be a long listing.
 def place_cursor color=CURSOR_COLOR
   # FIXME: hint not coming correct on other pages.
   hint = '?'
-  hint = get_shortcut(@cursor - @sta) if @highlight_row_flag
+  if @highlight_row_flag
+    hint = get_shortcut(@cursor - @sta) if @highlight_row_flag
+    f = current_file
+    if color == CLEAR
+      fullname = f[0] == '~' ? File.expand_path(f) : f
+      color = color_for fullname
+    end
+  end
   c = @cursor - @sta
   if c < @grows
     tput_cup c, 0
@@ -855,7 +865,7 @@ end
 ##
 #
 # print in columns
-# ary - array of data (viewport, not view)
+# ary - array of data (viewport, not view) with hint and mark, possibly long listing
 # siz  - how many lines should there be in one column
 #
 def columnate ary, siz
@@ -876,23 +886,49 @@ def columnate ary, siz
     ctr = 0
     while ctr < siz
 
-      f = ary[ix].dup # 2019-04-14 - frozen_string_literal
-      # f is not just filename but marker and hint
+      # gte file name from viewport
+      # TODO this will be prefix info only
+      # f = ary[ix].dup # 2019-04-14 - frozen_string_literal
+      # f is not just filename but marker and hint and color codes
+      prefix = ary[ix]
 
       # check to see if we need to truncate
       # 2019-03-18 - truncate from middle of string.
       # 2019-03-24 - truncate and size to take care of color codes
       # fsz = f.size
-      unformatted_len, = filename_len(f)
+      # TODO put this in one func so we can call with f and wid from here and place cursor.
+      # We cannot call from elsewhere since this is formatted with hint
+      # and could be long listing
+      # we could add color here, and avoid complicated measuring. XXX
+      # we could retrieve filename from viewport.
+
+      # TODO: based on ix put this all into one method
+      # which can be called from place_cursor also
+      f = @viewport[ix]
+      fullname = f[0] == '~' ? File.expand_path(f) : f
+      color = color_for fullname
+
+      f = format_long_listing(f) if @long_listing
+
+      # 2019-03-31 - replace unprintable chars with ?
+      f = f.gsub(/[^[:print:]]/, '?')
+
+      f = "#{prefix}#{f}"
+      # unformatted_len, = filename_len(f)
+      unformatted_len = f.length
       if unformatted_len > wid
         # take the excess out from the center on both sides
+        # TODO clear this up since no color info here
         f = truncate_formatted_filename(f, unformatted_len, wid)
+        f = "#{color}#{f}#{CLEAR}" if color
 
       elsif unformatted_len < wid
 
-        f << ' ' * (wid - unformatted_len)
+        # f << ' ' * (wid - unformatted_len)
+        f = "#{color}#{f}#{CLEAR}" + ' ' * (wid - unformatted_len)
 
       end
+
 
       # if already a value in that line, append to it
       if buff[ctr]
@@ -985,8 +1021,8 @@ def filename_len name
 end
 
 ## formats the data with number, mark and details
+# ary is viewport array
 def format_array ary
-  # buff = Array.new
   buff = Array.new(ary.size)
   return buff if ary.nil? || ary.empty?
 
@@ -999,31 +1035,29 @@ def format_array ary
   ctr = 0
   ary.each do |f|
     ## ctr refers to the index in the column
-    mark = SPACE
     cur = SPACE
     ind = get_shortcut(ix)
+
+    mark = get_mark(f)
 
     # Handle separator before enhanced file list.
     # We do lost a shortcut
     ind = cur = mark = '-' if f == SEPARATOR
 
-    mark = '+' if visited? f
-    # cur = CURMARK if ix + @sta == @cursor # 2019-03-29 - removed reduced calls
-    # NOTE seems like f and ary[ix] are the same
-    mark = GMARK if selected?(ary[ix])
-
     # take care of shortcuts in visited files and dirs
-    fullname = f[0] == '~' ? File.expand_path(f) : f
-    color = color_for fullname
+    # XXX can we put the color in the columnate after truncating?
+    # fullname = f[0] == '~' ? File.expand_path(f) : f
+    # color = color_for fullname
 
-    f = format_long_listing(f) if @long_listing
+    # f = format_long_listing(f) if @long_listing
 
     # 2019-03-31 - replace unprintable chars with ?
-    f = f.gsub(/[^[:print:]]/, '?')
+    # f = f.gsub(/[^[:print:]]/, '?')
 
-    # FIXME do in one operation. otherwise creating string 2 times
-    s = "#{ind}#{mark}#{cur}#{f}"
-    s = "#{color}#{s}#{CLEAR}" if color
+    # FIXME: do in one operation. otherwise creating string 2 times
+    # s = "#{ind}#{mark}#{cur}#{f}"
+    s = "#{ind}#{mark}#{cur}"
+    # s = "#{color}#{s}#{CLEAR}" if color
 
     buff[ctr] = s
 
@@ -1033,6 +1067,14 @@ def format_array ary
   buff
 end
 
+def get_mark f
+  return GMARK if selected?(f)
+  return '+' if visited? f
+
+  SPACE
+  # cur = CURMARK if ix + @sta == @cursor # 2019-03-29 - removed reduced calls
+  # NOTE seems like f and ary[ix] are the same
+end
 def format_long_listing f
   return unless @long_listing
   return format('%10s  %s  %s', '-', '----------', f) if f == SEPARATOR
@@ -1551,7 +1593,7 @@ def print_help
     ary = columnate ary, (ary.size / 2) + 1
     ary.each { |line| file.puts line }
   end
-end
+end # print_help
 
 def page_stat_for_file
   stat = `stat #{current_file}`
@@ -1733,7 +1775,8 @@ def toggle_menu
         v: :visual_mode,
         t: :truncate_from,
         n: :enhanced_mode,
-        i: :instant_search }
+        i: :instant_search,
+        H: :highlight_row_flag }
   # TODO: add other values at end, what key ?
 
   _, menu_text = menu 'Toggle Menu', h
