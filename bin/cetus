@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-23 09:13
+#  Last update: 2019-04-23 09:56
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -348,7 +348,7 @@ PAGER_COMMAND = {
 @selected_files_escaped_flag = false
 @keys_to_clear = nil
 @ignore_case = true
-@highlight_row_flag = true #false
+@highlight_row_flag = true # false
 @debug_flag = false
 
 # See toggle_value
@@ -708,29 +708,27 @@ end
 # FIXME color of original hint lost if @highlight_row_flag.
 # we can even get the filename, but it has been formatted and could
 # be a long listing.
+# color can be CURSOR_COLOR or CLEAR
+# if CLEAR then we use original colors from get_formatted_filename.
+# Otherwise we need to use CURSOR_COLOR in place of current color
 def place_cursor color=CURSOR_COLOR
-  # FIXME: hint not coming correct on other pages.
-  hint = '?'
-  if @highlight_row_flag
-    hint = get_shortcut(@cursor - @sta) if @highlight_row_flag
-    f = current_file
-    if color == CLEAR
-      fullname = f[0] == '~' ? File.expand_path(f) : f
-      color = color_for fullname
-    end
-  end
   c = @cursor - @sta
+  wid = get_width @viewport.size, @grows
   if c < @grows
-    tput_cup c, 0
-    print "#{color}#{hint} #{CLEAR}" if @highlight_row_flag
-    return
+    rows = c
+    cols = 0
+  else
+    rows = c % @grows
+    cols = (c / @grows) * wid
   end
 
-  wid = get_width @viewport.size, @grows
-  rows = c % @grows
-  cols = (c / @grows) * wid
   tput_cup rows, cols
-  print "#{color}#{hint} #{CLEAR}" if @highlight_row_flag
+  return unless @highlight_row_flag
+
+  color = nil if color == CLEAR # let it determine its own color
+  f = get_formatted_filename(c, wid, color)
+  print f
+  tput_cup rows, cols # put it back at start
 end
 
 # place cursor on row and col taking first two rows into account
@@ -931,15 +929,8 @@ def truncate_formatted_filename f, unformatted_len, wid
   f = case @truncate_from
 
       when :right
-        # text starts at 0, or 'm' if escape code
-        # sindex = f[0] == "\e" ? f.index('m') : 0
-        sindex = 0
-
-        # We show exactly `wid` characters, but escapes are not displayed
-        # so add that may characters
-        # Also, remove 2 for $ and space
         # FIXME: 2019-04-23 - do we need the control code at end ??
-        f[0..wid + sindex - 2] + "$ \e[m"
+        f[0..wid - 2] + "$ "
 
       when :center
 
@@ -969,7 +960,7 @@ end
 # given index (in viewport) get a formatted, displayable rendition of the filename
 # returns a String with hint, marks, filename (optional details) and color codes
 # truncated to correct width.
-def get_formatted_filename ix, wid
+def get_formatted_filename ix, wid, color=nil
   f = @viewport[ix]
 
   ind = get_shortcut(ix)
@@ -979,8 +970,8 @@ def get_formatted_filename ix, wid
   ind = cur = mark = '-' if f == SEPARATOR
   prefix = "#{ind}#{mark}#{cur}"
 
-  fullname = f[0] == '~' ? File.expand_path(f) : f
-  color = color_for fullname
+  # fullname = f[0] == '~' ? File.expand_path(f) : f
+  color ||= color_for(f)
 
   f = format_long_listing(f) if @long_listing
 
@@ -1114,8 +1105,9 @@ def format_long_listing f
 end
 
 # determine color for a filename based on extension, then pattern, then filetype
-def color_for fname
-  return nil if fname == SEPARATOR
+def color_for f
+  return nil if f == SEPARATOR
+  fname = f[0] == '~' ? File.expand_path(f) : f
 
   extension = File.extname(fname)
   color = @ls_color[extension]
@@ -3803,8 +3795,8 @@ def only_cursor_moved?
   return unless @cursor_movement && @old_cursor
 
   # if cursor has not moved (first or last item on screen)
-  # keep testing this out 2019-04-14 -
   if @old_cursor == @cursor
+    place_cursor # otherwise highlight vanishes if keep pressing UP on first row.
     @cursor_movement = false
     return true # next in the loop
   end
