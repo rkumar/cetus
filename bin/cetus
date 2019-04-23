@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-23 14:21
+#  Last update: 2019-04-24 00:20
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -565,16 +565,20 @@ end
 def print_title
   # print help line and version
   print "#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
+  @current_dir ||= Dir.pwd
 
   # print 1 of n files, sort order, filter etc details
-  @title ||= Dir.pwd.sub(ENV['HOME'], '~')
+  @title ||= @current_dir.sub(ENV['HOME'], '~')
 
   # Add bookmark next to name of dir, if exists
   # FIXME This should not happen in other listings like find selected files etc
   # bm = @bookmarks.key(Dir.pwd)
-  bm = @bookmarks.map { |k, v| v == Dir.pwd ? k : nil }.compact.join(',')
-
-  bm = " ('#{bm})" if bm
+  # Display multiple bookmarks
+  bm = @bookmarks.select { |k, v| v == @current_dir }.keys.join(',')
+  bm = " ('#{bm})" if bm && bm != ''
+  # hotkeys numbers, do this once only and store, update when new created. FIXME
+  hk = @bookmarks.select { |k, v| k.match?(/[0-9]/)  }.keys.sort.join(' ')
+  # print on right side.
 
   fin = @sta + @viewport.size
   fl = @view.size
@@ -589,13 +593,13 @@ def print_title
     fl = ix if ix
   end
 
-  t = fl.zero? ? "#{@title}#{bm}  No files." : "#{@title}#{bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr}"
+  t = fl.zero? ? "#{@title}#{bm}  No files." : "#{@title}#{bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr} (#{hk})"
 
   # don't exceed columns while printing
   t = t[t.size - @gcols..-1] if t.size >= @gcols
 
   print "#{BOLD}#{t}#{CLEAR}\n"
-  print 'EMPTY' if fl.zero?
+  print "#{CURSOR_COLOR}EMPTY#{CLEAR}" if fl == 0
 end
 # ------------- end of print_title --------------------------------#
 
@@ -685,13 +689,7 @@ def draw_directory
   clear_screen
   print_title
 
-  # add hint and format the line
-  # buff = format_array @viewport
-  # buff = @viewport
-
   # break viewport into as many columns as required
-  # This is where directories get their blue color
-  # 2019-04-22 - buf only has ind and mark and cur not filename
   buff = columnate @viewport, @grows
 
   # starts printing array on line 3
@@ -714,8 +712,15 @@ end
 # if CLEAR then we use original colors from get_formatted_filename.
 # Otherwise we need to use CURSOR_COLOR in place of current color
 def place_cursor color=CURSOR_COLOR
+  vps = @viewport.size
+  if vps == 0
+    # empty
+    tput_cup 0, 0
+    return
+  end
+
   c = @cursor - @sta
-  wid = get_width @viewport.size, @grows
+  wid = get_width vps, @grows
   if c < @grows
     rows = c
     cols = 0
@@ -860,7 +865,7 @@ end
 
 ## format date for file given stat
 def date_format t
-  t.strftime '%Y/%m/%d'
+  t.strftime '%Y/%m/%d %H:%M:%S'
 end
 
 ##
@@ -887,22 +892,7 @@ def columnate ary, siz
     ctr = 0
     while ctr < siz
 
-      # gte file name from viewport
-      # TODO this will be prefix info only
-      # f = ary[ix].dup # 2019-04-14 - frozen_string_literal
-      # f is not just filename but marker and hint and color codes
-
-      # fsz = f.size
-      # TODO put this in one func so we can call with f and wid from here and place cursor.
-      # We cannot call from elsewhere since this is formatted with hint
-      # and could be long listing
-      # we could add color here, and avoid complicated measuring. XXX
-      # we could retrieve filename from viewport.
-
-      # TODO: based on ix put this all into one method
-      # which can be called from place_cursor also
       f = get_formatted_filename(ix, wid)
-
 
       # if already a value in that line, append to it
       if buff[ctr]
@@ -981,7 +971,7 @@ def get_formatted_filename ix, wid, color=nil
   f = f.gsub(/[^[:print:]]/, '?')
 
   f = "#{prefix}#{f}"
-  # unformatted_len, = filename_len(f)
+
   unformatted_len = f.length
   if unformatted_len > wid
     # take the excess out from the center on both sides
@@ -993,8 +983,8 @@ def get_formatted_filename ix, wid, color=nil
 
     # f << ' ' * (wid - unformatted_len)
     f = "#{color}#{f}#{CLEAR}" + ' ' * (wid - unformatted_len)
-
   end
+
   return f
 end
 
@@ -1008,73 +998,20 @@ def get_width arysz, siz
   wid
 end
 
-# calculate length of filename without ANSI color codes
-def filename_len name
-  l = name.length
-  return l if name[0] != "\e"
+def get_mark file
+  return SPACE if @selected_files.empty? && @visited_files.empty?
 
-  # we have an escape code at the start of the name (and end, too)
-  index = name.index('m')
-  eindex = name.rindex("\e")
-  reall = eindex - index - 1
-  return reall, l
-end
+  @current_dir ||= Dir.pwd
+  fullname = File.join(@current_dir, file)
 
-## formats the data with number, mark and details
-# ary is viewport array
-def format_array ary
-  buff = Array.new(ary.size)
-  return buff if ary.nil? || ary.empty?
-
-  # determine width based on number of files to show
-  # if less than sz then 1 col and full width
-  #
-  # ix refers to the index in the complete file list, whereas we only
-  # show 60 at a time
-  ix = 0
-  ctr = 0
-  ary.each do |f|
-    ## ctr refers to the index in the column
-    cur = SPACE
-    ind = get_shortcut(ix)
-
-    mark = get_mark(f)
-
-    # Handle separator before enhanced file list.
-    # We do lost a shortcut
-    ind = cur = mark = '-' if f == SEPARATOR
-
-    # take care of shortcuts in visited files and dirs
-    # XXX can we put the color in the columnate after truncating?
-    # fullname = f[0] == '~' ? File.expand_path(f) : f
-    # color = color_for fullname
-
-    # f = format_long_listing(f) if @long_listing
-
-    # 2019-03-31 - replace unprintable chars with ?
-    # f = f.gsub(/[^[:print:]]/, '?')
-
-    # FIXME: do in one operation. otherwise creating string 2 times
-    # s = "#{ind}#{mark}#{cur}#{f}"
-    s = "#{ind}#{mark}#{cur}"
-    # s = "#{color}#{s}#{CLEAR}" if color
-
-    buff[ctr] = s
-
-    ctr += 1
-    ix += 1
-  end
-  buff
-end
-
-def get_mark f
-  return GMARK if selected?(f)
-  return '+' if visited? f
+  return GMARK if selected?(fullname)
+  return '+' if visited? fullname
 
   SPACE
   # cur = CURMARK if ix + @sta == @cursor # 2019-03-29 - removed reduced calls
   # NOTE seems like f and ary[ix] are the same
 end
+
 def format_long_listing f
   return unless @long_listing
   return format('%10s  %s  %s', '-', '----------', f) if f == SEPARATOR
@@ -1277,9 +1214,9 @@ def open_file f
     system(comm.to_s)
     setup_terminal
     # XXX maybe use absolute_path instead of hardcoding
-    f = Dir.pwd + '/' + f if f[0] != '/'
+    f = @current_dir + '/' + f if f[0] != '/'
     @visited_files.insert(0, f)
-    push_used_dirs Dir.pwd
+    push_used_dirs @current_dir
   else
     perror "open_file: (#{f}) not found"
     # could check home dir or CDPATH env variable DO
@@ -1372,6 +1309,7 @@ def change_dir f
 
   f = File.expand_path(f)
   Dir.chdir f
+  @current_dir = Dir.pwd # 2019-04-24 - earlier was in post_cd but too late
   read_directory
   post_cd
 
@@ -2125,7 +2063,6 @@ def post_cd
   @title = @patt = @message = nil
   @sta = @cursor = @stact = 0
   @visual_block_start = nil
-  @current_dir = Dir.pwd
   screen_settings
 
   # goto last position cursor was in this dir
@@ -3130,19 +3067,15 @@ end
 # --
 
 # is given file in selected array
-def visited? file
-  @current_dir ||= Dir.pwd
-  file = File.join(@current_dir, file)
-  return @visited_files.index file
+def visited? fullname
+  return @visited_files.index fullname
 end
 
 # ------------- selection related methods --------------------------------#
 
 # is given file in selected array
-def selected? file
-  @current_dir ||= Dir.pwd
-  file = File.join(@current_dir, file)
-  return @selected_files.index file
+def selected? fullname
+  return @selected_files.index fullname
 end
 
 # add given file/s to selected file list
@@ -3517,6 +3450,7 @@ end
 def enhance_file_list
   # return unless cget(:enhanced_mode)
   return unless @enhanced_mode
+  @current_dir ||= Dir.pwd
 
   begin
     actr = @files.size
@@ -3550,7 +3484,7 @@ def enhance_file_list
     if @files.index('Gemfile') || !@files.grep(/\.gemspec/).empty?
       # usually the lib dir has only one file and one dir
       flg = false
-      @files.concat get_important_files(Dir.pwd)
+      @files.concat get_important_files(@current_dir)
       if @files.index('lib/')
         # get first five entries by modification time
         # f1 = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
@@ -3562,7 +3496,7 @@ def enhance_file_list
         end
 
         # look into lib file for that project
-        dd = File.basename(Dir.pwd)
+        dd = File.basename(@current_dir)
         if f.index("lib/#{dd}/")
           # f1 = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
           f = get_files_by_mtime("lib/#{dd}")&.first(5)
