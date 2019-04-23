@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-23 00:07
+#  Last update: 2019-04-23 09:13
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -684,12 +684,13 @@ def draw_directory
   print_title
 
   # add hint and format the line
-  buff = format_array @viewport
+  # buff = format_array @viewport
+  # buff = @viewport
 
   # break viewport into as many columns as required
   # This is where directories get their blue color
   # 2019-04-22 - buf only has ind and mark and cur not filename
-  buff = columnate buff, @grows
+  buff = columnate @viewport, @grows
 
   # starts printing array on line 3
   buff.each { |line| print line, "\n" }
@@ -890,11 +891,7 @@ def columnate ary, siz
       # TODO this will be prefix info only
       # f = ary[ix].dup # 2019-04-14 - frozen_string_literal
       # f is not just filename but marker and hint and color codes
-      prefix = ary[ix]
 
-      # check to see if we need to truncate
-      # 2019-03-18 - truncate from middle of string.
-      # 2019-03-24 - truncate and size to take care of color codes
       # fsz = f.size
       # TODO put this in one func so we can call with f and wid from here and place cursor.
       # We cannot call from elsewhere since this is formatted with hint
@@ -904,30 +901,7 @@ def columnate ary, siz
 
       # TODO: based on ix put this all into one method
       # which can be called from place_cursor also
-      f = @viewport[ix]
-      fullname = f[0] == '~' ? File.expand_path(f) : f
-      color = color_for fullname
-
-      f = format_long_listing(f) if @long_listing
-
-      # 2019-03-31 - replace unprintable chars with ?
-      f = f.gsub(/[^[:print:]]/, '?')
-
-      f = "#{prefix}#{f}"
-      # unformatted_len, = filename_len(f)
-      unformatted_len = f.length
-      if unformatted_len > wid
-        # take the excess out from the center on both sides
-        # TODO clear this up since no color info here
-        f = truncate_formatted_filename(f, unformatted_len, wid)
-        f = "#{color}#{f}#{CLEAR}" if color
-
-      elsif unformatted_len < wid
-
-        # f << ' ' * (wid - unformatted_len)
-        f = "#{color}#{f}#{CLEAR}" + ' ' * (wid - unformatted_len)
-
-      end
+      f = get_formatted_filename(ix, wid)
 
 
       # if already a value in that line, append to it
@@ -958,11 +932,13 @@ def truncate_formatted_filename f, unformatted_len, wid
 
       when :right
         # text starts at 0, or 'm' if escape code
-        sindex = f[0] == "\e" ? f.index('m') : 0
+        # sindex = f[0] == "\e" ? f.index('m') : 0
+        sindex = 0
 
         # We show exactly `wid` characters, but escapes are not displayed
         # so add that may characters
         # Also, remove 2 for $ and space
+        # FIXME: 2019-04-23 - do we need the control code at end ??
         f[0..wid + sindex - 2] + "$ \e[m"
 
       when :center
@@ -982,19 +958,50 @@ def truncate_formatted_filename f, unformatted_len, wid
         # for single hints we need to add extra space
         # there could be escape codes of varying length
         sindex = f.index ' '
-        # if f[0] == "\e"
-        # mindex = f.index('m')
-        # hintsize = sindex - mindex - 1
-        # else
-        # hintsize = sindex - 1
-        # end
-        # f[0..sindex + 1] + '<' + f[-wid + hintsize..-1] + ' '
-        # @log.debug "XXX #{excess}: #{f} / #{wid}"
         # 4 = 2 for literals, 2 to get ahead of sindex+1
         f[0..sindex + 1] + '<' + f[sindex + 4 + excess..-1] + ' '
         # in some cases 29/32 we are actually overlapping 2 parts above
         #  same for 34/32
       end
+  return f
+end
+
+# given index (in viewport) get a formatted, displayable rendition of the filename
+# returns a String with hint, marks, filename (optional details) and color codes
+# truncated to correct width.
+def get_formatted_filename ix, wid
+  f = @viewport[ix]
+
+  ind = get_shortcut(ix)
+  mark = get_mark(f)
+  # Handle separator before enhanced file list.
+  # We do lose a shortcut
+  ind = cur = mark = '-' if f == SEPARATOR
+  prefix = "#{ind}#{mark}#{cur}"
+
+  fullname = f[0] == '~' ? File.expand_path(f) : f
+  color = color_for fullname
+
+  f = format_long_listing(f) if @long_listing
+
+  # replace unprintable chars with ?
+  f = f.gsub(/[^[:print:]]/, '?')
+
+  f = "#{prefix}#{f}"
+  # unformatted_len, = filename_len(f)
+  unformatted_len = f.length
+  if unformatted_len > wid
+    # take the excess out from the center on both sides
+    # TODO clear this up since no color info here
+    f = truncate_formatted_filename(f, unformatted_len, wid)
+    f = "#{color}#{f}#{CLEAR}" if color
+
+  elsif unformatted_len < wid
+
+    # f << ' ' * (wid - unformatted_len)
+    f = "#{color}#{f}#{CLEAR}" + ' ' * (wid - unformatted_len)
+
+  end
   return f
 end
 
