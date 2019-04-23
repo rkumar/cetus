@@ -15,16 +15,17 @@ Tested with ruby 2.6
 
 ### Latest changes:
 
-2019-04-23 - Major cleanup and rewrite, once again show highlighted row. V 0.2.0
-2019-03-26 - Reading up 'LS_COLORS' and coloring filenames. v0.1.30
-2019-03-24 - Major refactoring and cleanup. v 0.1.29
-2019-03-04 - q is quit key, not Q
-           - show directories first, then files.
-           - C-s to select (toggle) current file
+* 2019-04-23 - Major cleanup and rewrite, once again show highlighted row. V 0.2.0
+* 2019-03-26 - Reading up 'LS_COLORS' and coloring filenames. v0.1.30
+* 2019-03-24 - Major refactoring and cleanup. v 0.1.29
+* 2019-03-04 - q is quit key, not Q
+           * show directories first, then files.
+           * C-s to select (toggle) current file
 
-2018-03-12 - now using LEFT and RIGHT arrow keys to go down into a directory, or up to higher directory.
-Also, pressing RIGHT ARROW on a file will open the file.
-Previously RIGHT and LEFT arrows would move to next or previous columns, i have put this on left and right square bracket.
+* 2018-03-12 - now using LEFT and RIGHT arrow keys to go down into a directory, or up to higher directory.
+* pressing RIGHT ARROW on a file will open the file.
+
+* Previously RIGHT and LEFT arrows would move to next or previous columns, i have put this on left and right square bracket.
 
 
 ## Selecting a file
