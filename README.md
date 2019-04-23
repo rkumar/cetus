@@ -1,23 +1,30 @@
 cetus
 =====
 
-lightning-fast file navigator
+Lightning-fast file navigator.
 
-Tested with ruby 2.5
+Open or page a file using hotkeys, rather than pressing ARROW keys repetitively (although that is supported also.)
 
-Latest changes:
+Many file actions are supported.
+
+Scripts may be executed for selected files thus extending functionality.
+
+
+Tested with ruby 2.6
+
+
+### Latest changes:
+
+2019-04-23 - Major cleanup and rewrite, once again show highlighted row. V 0.2.0
 2019-03-26 - Reading up 'LS_COLORS' and coloring filenames. v0.1.30
 2019-03-24 - Major refactoring and cleanup. v 0.1.29
 2019-03-04 - q is quit key, not Q
            - show directories first, then files.
-           - trying not to pollute main screen/terminal with listings (i.e. use alt screen)
            - C-s to select (toggle) current file
 
 2018-03-12 - now using LEFT and RIGHT arrow keys to go down into a directory, or up to higher directory.
-Also, pressing RIGHT ARROW on a file with open the file.
+Also, pressing RIGHT ARROW on a file will open the file.
 Previously RIGHT and LEFT arrows would move to next or previous columns, i have put this on left and right square bracket.
-
-2018-03-13 - unable to push new gem 0.1.16 to rubygems.
 
 
 ## Selecting a file
@@ -27,22 +34,26 @@ There are two ways of selecting a file.
 1. Pressing C-s on a file.
 2. Use hotkey (on left of file) to select without having to navigate.
 
-While using C-s marks a file as selected, pressing the hotkey will either open
+While using C-s marks a file as selected, OTOH pressing the hotkey will either open
 the file using PAGER or EDITOR depending on current mode.
 
 ## Multiple Selection of files
 
-1. Press C-s on multiple files.
-2. Press `@` to enter multiple select mode.
+1. Press C-s on multiple files. '*' toggles between multiple and single select mode.
+
+2. Press `*` (asterisk) to enter multiple select mode.
 Now press the hotkey (left of file) to select it.
 
+3. Visual Mode. Press `Ctrl-Space` to enter visual/range select. Now move the arrow keys
+up or down to select. Press `Ctrl-Space` again to end selection. Several ranges may be selected.
+
 To execute an action on multiple (or single) files, you may press `C-x` and choose
-an action such as move or delete, etc.
+an action such as move, delete, rename, copy, etc.
 
 You may also select all files with the same extension as current file. Invoke the
 filter menu using Tilde-F. Now select `x` or `:extension`.
 
-`Tilde-y` is the selection menu. M-a is select all, M-A is unselect all.
+`Tilde-s` is the selection menu. M-a is select all, M-A is unselect all.
 
 ## Moving multiple files
 
@@ -52,7 +63,7 @@ Now there are two ways to move selected files to another directory.
 
 1. Press `C-x m` and type the name of the directory at the prompt.
 
-2. Navigate to the target directory, and then press `C-x m` and type "." at the prompt.
+2. Or navigate to the target directory, and then press `C-x m` and type "." at the prompt.
 
 ## Copying files to another directory.
 
@@ -60,10 +71,13 @@ Use the same procedure as for moving files but press `C-x c`
 
 1. Press `C-x c` and then type the name of the target directory at the prompt.
 
-2. Navigate to the target directory, and press `C-x c`, and type '.' at the prompt.
+2. Select files, then navigate to the target directory, and press `C-x c`, and type '.' at the prompt.
 
+3. If copying a file, to the same directory, or if the file already exists, a unique name will be suggested (numeric suffix).
 
-fork of lyra with a different hotkey idea. Use this for quickly navigating your file system using hotkeys
+## More
+
+Fork of `lyra` with a different hotkey idea. Use this for quickly navigating your file system using hotkeys
 and bookmarks, and executing commands on single or multiple files easily.
 
 See https://github.com/rkumar/lyra for detailed info of usage.
@@ -76,11 +90,6 @@ only 60 files can be shown at a time on a screen.
 
 It also maps z and Z which are at a convenient location. If there are more than 24 then za-zz are used. if the file exceed even that, then the range Za-ZZ is used. This means that larger screens will be filled with file names (upto ROWS * 3), and the user can even specify the number of columns. I've tried with 6. The remainder files gets an index of "&rt;" (right arrow) which means that if one presses right arrow then the indexing starts from the second column. RIGHT and LEFT arrow can be used to move indexing.
 
-Experimentally added cursor movements which currently is only used if you get into a so-called visual mode, by pressing C-Space, moving up and down arrow and C-d and C-b will start adding to selection.
-I did this since I was selecting quite a few files to delete in some old directory and would have liked some range delete. One can, of course, select files for a regex by pressing "/" giving a regex, and then using M-a to select all. Clear selection with M-A (Alt-Shift-a).
-
-The cursor position shows up as a greater than sign, I hope not to implement all of zfm here. It's mainly used only to select multiple files that are contiguous.
-
 
 Press C-x to execute actions on selected files. A menu of actions is displayed.
 Or Press one of several commands after selecting files such as "D" for delete, or "M" to use your man-pager.
@@ -90,16 +99,20 @@ You can bind other capital letters to any external command. If there are selecte
 
 The rest is similar to lyra. Some key points are highlighted here.
 
-* Create bookmarks for often used directories using Alt-m. Then access them using single-quote and upper character.
+* Create bookmarks for often used directories using Alt-m. Then access them using single-quote and character.
   You have to be inside the directory when saving a new bookmark. e.g. `'P`. This is a fast way of jumping directories. I've got "P" mapped to projects, and "Z" to zfm, and so forth.
 
-* Single-quote and small letter jumps to the first file starting with given letter. e.g. `'s`
+* Single-quote and letter jumps to the first file starting with given letter. e.g. `'s`
+* Double-quote and letter jumps to the first file starting with given letter. e.g. `"s`
+
+* Numbers for bookmarks. The starting directory is automatically bookmarked as '0'.
+Pressing '0' from anywhere brings us to the starting directory. Pressing a number will create a bookmark for the current directory, or take us to that directory, if a bookmark exists. This is a quick way to make bookmarks and jump to them. Useful when moving or copying files.
 
 * Space-bar pages, also Alt n and p. Ctrl-d and Ctrl-b goes down 10 rows.
 
 * Backtick is the main menu, which has options for sorting, filtering, seeing often used dirs and files, choosing from dirs in the `z` database, choosing used files from the `.viminfo` file, etc.
 
-Other than using bookmarks, you can jump quickly to other directories or open files using BACKTICK and the releant option which should become part of muscle memory very fast.
+Other than using bookmarks, you can jump quickly to other directories or open files using BACKTICK and the relevant option which should become part of muscle memory very fast.
 
 * Use Alt-d and Alt-f to see used directories and used files. Used directories are those dirs in which you have opened a file, not all dirs you've traversed. Certain directories are added to this list to make it more useful such as GEM_HOME, RUBYPATH, GEM_PATH, RUBYLIB, PYTHONPATH and PYTHONHOME.
 
