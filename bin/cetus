@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-24 09:30
+#  Last update: 2019-04-24 09:35
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -958,7 +958,10 @@ end
 # returns a String with hint, marks, filename (optional details) and color codes
 # truncated to correct width.
 # highcolor is highlight color
-def get_formatted_filename ix, wid, highcolor=nil
+# NOTE: when highcolor is added prior to color, then it reverses most lines
+#  but not a few. So I am using only reverse and not both.
+def get_formatted_filename ix, wid, color=nil
+  highcolor = nil
   f = @viewport[ix]
 
   ind = get_shortcut(ix)
@@ -969,7 +972,7 @@ def get_formatted_filename ix, wid, highcolor=nil
   prefix = "#{ind}#{mark}#{cur}"
 
   # fullname = f[0] == '~' ? File.expand_path(f) : f
-  color = color_for(f)
+  color ||= color_for(f)
 
   f = format_long_listing(f) if @long_listing
 
