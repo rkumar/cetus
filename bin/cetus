@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-24 13:56
+#  Last update: 2019-04-24 14:34
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -40,7 +40,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.2.0.0'
+VERSION = '0.2.0.1'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -1181,7 +1181,7 @@ end
 
 ## toggle selection state of file
 def toggle_select f=current_file
-  if selected? f
+  if selected? File.join(@current_dir, current_file)
     remove_from_selection f
   else
     @selected_files.clear unless @multiple_selection
@@ -1469,9 +1469,14 @@ end
 def goto_bookmark key=nil
   unless key
     clear_last_line
-    print 'Enter bookmark char: '
+    print 'Enter bookmark char (? to view): '
     key = get_char
   end
+  if key == '?'
+    view_bookmarks
+    return
+  end
+
   d = @bookmarks[key]
   if d
     change_dir d
@@ -2544,7 +2549,7 @@ def get_unique_file_name fname
     return f unless File.exist?(f)
   end
 
-  timestamp = Time.now.strftime("%Y%m%d-%H%M%S")
+  timestamp = Time.now.strftime('%Y%m%d-%H%M%S')
   return fname + '.' + timestamp
 end
 
@@ -3082,7 +3087,7 @@ def move_to position
   @cursor_movement = nil # visual mode needs to redraw page
 
   # PWD has to be there in selction
-  if selected? current_file
+  if selected? File.join(@current_dir, current_file)
     # this depends on the direction
     # @selected_files = @selected_files - @view[star..fin]
     remove_from_selection @view[star..fin]
@@ -3104,6 +3109,8 @@ end
 # ------------- selection related methods --------------------------------#
 
 # is given file in selected array
+# 2019-04-24 - now takes fullname so path addition does not keep happening in
+#  a loop in draw directory.
 def selected? fullname
   return @selected_files.index fullname
 end
