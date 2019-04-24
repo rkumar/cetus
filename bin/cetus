@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-24 00:20
+#  Last update: 2019-04-24 09:23
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -577,7 +577,7 @@ def print_title
   bm = @bookmarks.select { |k, v| v == @current_dir }.keys.join(',')
   bm = " ('#{bm})" if bm && bm != ''
   # hotkeys numbers, do this once only and store, update when new created. FIXME
-  hk = @bookmarks.select { |k, v| k.match?(/[0-9]/)  }.keys.sort.join(' ')
+  hk = @bookmarks.select { |k, v| k.match?(/[0-9]/)  }.keys.sort.join('')
   # print on right side.
 
   fin = @sta + @viewport.size
@@ -713,8 +713,9 @@ end
 # Otherwise we need to use CURSOR_COLOR in place of current color
 def place_cursor color=CURSOR_COLOR
   vps = @viewport.size
+
+  # empty directory
   if vps == 0
-    # empty
     tput_cup 0, 0
     return
   end
@@ -732,8 +733,10 @@ def place_cursor color=CURSOR_COLOR
   tput_cup rows, cols
   return unless @highlight_row_flag
 
+  # color = nil if color == CLEAR # let it determine its own color
   color = nil if color == CLEAR # let it determine its own color
   f = get_formatted_filename(c, wid, color)
+  # f = color + f if color
   print f
   tput_cup rows, cols # put it back at start
 end
@@ -922,7 +925,7 @@ def truncate_formatted_filename f, unformatted_len, wid
 
       when :right
         # FIXME: 2019-04-23 - do we need the control code at end ??
-        f[0..wid - 2] + "$ "
+        f[0..wid - 3] + "$ "
 
       when :center
 
@@ -2986,11 +2989,13 @@ end
 ## scroll cursor down
 def cursor_scroll_dn
   @cursor_movement = :down
+  @old_cursor = @cursor
   move_to(pos + MSCROLL)
 end
 
 def cursor_scroll_up
   @cursor_movement = :up
+  @old_cursor = @cursor
   move_to(pos - MSCROLL)
 end
 
