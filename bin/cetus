@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-24 14:34
+#  Last update: 2019-04-24 15:45
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -562,6 +562,7 @@ def create_viewport
 
   # viewport are the files that are visible, subset of view
   @viewport = @view[@sta, @pagesize]
+  @vps = @viewport.size
 end
 # ------------- end of create_viewport --------------------------------#
 
@@ -581,7 +582,7 @@ def print_title
   bm = @bookmarks.select { |k, v| v == @current_dir }.keys.join(',')
   bm = " ('#{bm})" if bm && bm != ''
 
-  fin = @sta + @viewport.size
+  fin = @sta + @vps
   fl = @view.size
 
   # fix count of entries so separator and enhanced entries don't show up
@@ -648,7 +649,7 @@ def status_line
 end
 
 def print_debug_info cf=current_file
-  print_on_right "len:#{cf.length}/#{@temp_wid} = #{@sta},#{@cursor},#{@stact},#{@viewport.size},#{@grows} | #{cf}"
+  print_on_right "len:#{cf.length}/#{@temp_wid} = #{@sta},#{@cursor},#{@stact},#{@vps},#{@grows} | #{cf}"
 end
 
 def print_filename_status_line cf=current_file
@@ -717,16 +718,14 @@ end
 # if CLEAR then we use original colors from get_formatted_filename.
 # Otherwise we need to use CURSOR_COLOR in place of current color
 def place_cursor color=CURSOR_COLOR
-  vps = @viewport.size
-
   # empty directory
-  if vps == 0
+  if @vps == 0
     tput_cup 0, 0
     return
   end
 
   c = @cursor - @sta
-  wid = get_width vps, @grows
+  wid = get_width @vps, @grows
   if c < @grows
     rows = c
     cols = 0
@@ -1606,7 +1605,7 @@ def debug_vars
     file.puts "sta    #{@sta}"
     file.puts "cursor #{@cursor}"
     file.puts "stact  #{@stact}"
-    file.puts "viewport.size  #{@viewport.size}"
+    file.puts "viewport.size  #{@vps}"
     file.puts "pagesize       #{@pagesize}"
     file.puts "view.size      #{@view.size}"
     file.puts "grows          #{@grows}"
@@ -2345,7 +2344,7 @@ def get_shortcut index
   # Now we show unused shortcuts after exhausting them.
   # return '<' if index < @stact
   if index < @stact
-    index = @viewport.size - @stact + index
+    index = @vps - @stact + index
     i = IDX[index]
     return i if i
 
@@ -2392,22 +2391,21 @@ def convert_key_to_index key
   i = IDX.index(key)
   return nil unless i
 
-  # @log.debug "get_index with #{key}: #{i}. #{@stact}. #{@viewport.size}"
-  vps = @viewport.size
+  # @log.debug "get_index with #{key}: #{i}. #{@stact}. #{@vps}"
   # TODO: if very high key given, consider going to last file ?
   #  that way one can press zz or ZZ to go to last file.
   # 2019-04-11 - XXX actually this doesnt place the cursor on last file
   #  it opens it, which may not be what we want
   retnil = nil # vps - 1 # nil
   # user has entered a key that is outside of range, return nil
-  return retnil if @stact == 0 && i + @stact >= vps
+  return retnil if @stact == 0 && i + @stact >= @vps
 
   # again, key out of range
-  # return nil if @stact > 0 && i + @stact >= vps && i + @stact - vps >= @stact
-  return retnil if @stact > 0 && i + @stact >= vps && i - vps >= 0
+  # return nil if @stact > 0 && i + @stact >= @vps && i + @stact - @vps >= @stact
+  return retnil if @stact > 0 && i + @stact >= @vps && i - @vps >= 0
 
   # panning case, hints are recycled
-  return (i + @stact) - vps if i + @stact >= vps
+  return (i + @stact) - @vps if i + @stact >= @vps
 
   # regular hint
   return i + @stact # if i
@@ -2716,7 +2714,7 @@ def ask_hint deflt=nil
   key = get_char
   return deflt if key == 'ENTER'
 
-  ix = get_index(key, @viewport.size)
+  ix = get_index(key, @vps)
   f = @viewport[ix] if ix
   f
 end
@@ -2744,11 +2742,11 @@ def column_next direction=0
   # leftward movement stops at first column.
   if direction == 0
     @stact += @grows
-    @stact = 0 if @stact >= @viewport.size
+    @stact = 0 if @stact >= @vps
     @cursor += @grows
     # 2019-03-18 - zero loses offset. we need to maintain it
-    # @cursor = 0 if @cursor >= @viewport.size
-    if @cursor - @sta >= @viewport.size
+    # @cursor = 0 if @cursor >= @vps
+    if @cursor - @sta >= @vps
       @cursor -= @grows while @cursor > @sta
       @stact -= @grows while @stact > 0
       @cursor += @grows if @cursor < @sta
@@ -3070,7 +3068,7 @@ def move_to position
   oldsta = @sta
   if @cursor - @sta >= @pagesize
     @sta += @pagesize
-    # elsif @sta - @cursor >= @viewport.size
+    # elsif @sta - @cursor >= @vps
   end
   if @sta > @cursor
     @sta -= @pagesize
