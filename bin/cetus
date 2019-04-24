@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-24 09:59
+#  Last update: 2019-04-24 13:56
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -333,6 +333,7 @@ PAGER_COMMAND = {
   text: 'most',
   image: 'open',
   zip: 'tar ztvf %% | most',
+  sqlite: 'sqlite3 %% .schema | most',
   unknown: 'open'
 }.freeze
 @dir_position = {}
@@ -400,7 +401,7 @@ ON_BLUE    = "\e[44m"
 REVERSE    = "\e[7m"
 REVERSE_OFF = "\e[27m"
 UNDERLINE    = "\e[4m"
-CURSOR_COLOR = ON_RED
+CURSOR_COLOR = REVERSE
 
 # NOTE: that osx uses LSCOLORS which only has colors for filetypes not
 #  extensions and patterns which LS_COLORS has.
@@ -576,12 +577,9 @@ def print_title
   # Add bookmark next to name of dir, if exists
   # FIXME This should not happen in other listings like find selected files etc
   # bm = @bookmarks.key(Dir.pwd)
-  # Display multiple bookmarks
+  # Display multiple bookmarks. Can be calculated on changing directory ?
   bm = @bookmarks.select { |k, v| v == @current_dir }.keys.join(',')
   bm = " ('#{bm})" if bm && bm != ''
-  # hotkeys numbers, do this once only and store, update when new created. FIXME
-  hk = @bookmarks.select { |k, v| k.match?(/[0-9]/)  }.keys.sort.join('')
-  # print on right side.
 
   fin = @sta + @viewport.size
   fl = @view.size
@@ -596,12 +594,16 @@ def print_title
     fl = ix if ix
   end
 
-  t = fl.zero? ? "#{@title}#{bm}  No files." : "#{@title}#{bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr} (#{hk})"
+  t = fl.zero? ? "#{@title}#{bm}  No files." : "#{@title}#{bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr}"
 
   # don't exceed columns while printing
   t = t[t.size - @gcols..-1] if t.size >= @gcols
 
-  print "#{BOLD}#{t}#{CLEAR}\n"
+  print "#{BOLD}#{t}#{CLEAR}"
+
+  tput_cup(-1, @gcols - @hk.length - 2)
+  puts '[' + @hk + ']'
+
   print "#{CURSOR_COLOR}EMPTY#{CLEAR}" if fl == 0
 end
 # ------------- end of print_title --------------------------------#
@@ -847,6 +849,7 @@ end
 
 def set_bookmark key, dir=Dir.pwd
   @bookmarks[key] = dir
+  @hk = @bookmarks.select { |k, _| k.match?(/[0-9]/)  }.keys.sort.join('')
 end
 
 ## write current dir to a file so we can ccd to it when exiting
@@ -1666,6 +1669,7 @@ def bookmark_menu
   h = {
     v: :view_bookmarks,
     c: :create_bookmark,
+    r: :remove_bookmark,
     g: :goto_bookmark
   }
   menu 'Bookmark Menu', h
@@ -2142,12 +2146,25 @@ def create_bookmark
   key = get_char
   # print "\e[?25l" # hide cursor
   if /^[0-9A-Za-z]$/.match?(key)
-    # @bookmarks[key] = "#{Dir.pwd}:#{@cursor}"
     set_bookmark key
     @modified = true
     message "Created bookmark #{key} for #{File.basename(Dir.pwd)}."
   else
     perror 'Bookmark must be alpha character or number.'
+  end
+end
+
+def remove_bookmark
+  bmlist = @bookmarks.keys.sort.join('')
+  clear_last_line
+  print "Enter bookmark to delete: #{bmlist}:"
+  key = get_char
+  if bmlist.index(key)
+    @modified = true
+    @bookmarks.delete key
+    message "Deleted #{key} "
+  else
+    perror 'Bookmark does not exist'
   end
 end
 
@@ -3199,6 +3216,8 @@ def filetype f
   return :zip if s.index(/[Zz]ip/)
   return :zip if s.index('archive')
   return :image if s.index 'image'
+  return :sqlite if s.index 'SQLite'
+  # return :db if s.index 'database'
   return :text if s.index 'data'
 
   nil
@@ -3211,9 +3230,11 @@ def opener_for f
   # Get filetype, and check for command for type, else extn else unknown
   if !@editor_mode
     ft = filetype f
+    @log.debug "opener: #{ft} for #{f}"
     comm = PAGER_COMMAND[ft] if ft
     comm ||= PAGER_COMMAND[File.extname(f)]
     comm ||= PAGER_COMMAND[:unknown]
+    @log.debug "opener: #{comm}"
   else
     # 2019-04-10 - what does this mean, that in editor_mode, editor
     # opens everything? what of images etc
