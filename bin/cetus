@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-24 15:45
+#  Last update: 2019-04-25 16:04
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -465,7 +465,6 @@ def read_directory
   list_files
 
   group_directories_first
-  # return unless cget(:enhanced_mode)
   return unless @enhanced_mode
 
   enhance_file_list
@@ -542,7 +541,6 @@ end
 # ------------------- create_viewport ------------------ #
 def create_viewport
   @view = if @patt
-            # if cget(:ignore_case)
             if @ignore_case
               @files.grep(/#{@patt}/i)
             else
@@ -586,7 +584,6 @@ def print_title
   fl = @view.size
 
   # fix count of entries so separator and enhanced entries don't show up
-  # if cget(:enhanced_mode)
   if @enhanced_mode
     ix = @viewport.index SEPARATOR
     fin = @sta + ix if ix
@@ -624,7 +621,6 @@ def status_line
   # Print the filename at the right side of the status line
   # sometimes due to search, there is no file
   if cf
-    # if cget(:debug_flag)
     if @debug_flag
       print_debug_info cf
     else
@@ -636,7 +632,6 @@ def status_line
   # patt and message are together, no gap, why not ? 2019-04-08 -
   if @patt && @patt != ''
     patt = "[/#{@patt}" + ']' # to get unfrozen string
-    # patt[-1] = '/i]' if cget(:ignore_case)
     patt[-1] = '/i]' if @ignore_case
   end
   # bring cursor to start of line
@@ -1187,13 +1182,20 @@ def toggle_select f=current_file
     add_to_selection f
   end
   message "#{@selected_files.count} files selected.   "
-  # XXX is it possible to just redraw this line
-  redraw_required
+
+  # 2019-04-24 - trying to avoid redrawing entire screen.
+  # If multiple_selection then current selection is either added or removed,
+  #  nothing else changes, so we redraw only if not multi. Also place cursor
+  #  i.e. redraw current row if mutliple selection
+  if @multiple_selection
+    place_cursor
+  else
+    redraw_required
+  end
 end
 
 # allow single or multiple selection with C-s key
 def toggle_multiple_selection
-  # @multiple_selection = !@multiple_selection
   toggle_value :multiple_selection
 end
 
@@ -1271,6 +1273,7 @@ def run_on_current command
   system(comm.to_s)
   push_used_dirs
   setup_terminal
+  redraw_required
 end
 
 ## run system command on given file/s
@@ -1364,7 +1367,6 @@ end
 
 # put directories first, then files
 def group_directories_first
-  # return if cget(:group_directories) == :none
   return if @group_directories == :none
 
   files = @files
@@ -1488,7 +1490,7 @@ end
 def ask_regex
   @title = 'Search Results: (Press Escape to cancel)'
   @mode = 'SEARCH'
-  if cget(:instant_search)
+  if @toggles[:instant_search]
     search_as_you_type
   else
     @patt = readline '/'
@@ -1661,9 +1663,9 @@ def selection_menu
     :a => :select_all,
     :u => :unselect_all,
     :s => :toggle_select,
-    '*' => 'toggle_multiple_selection',
-    'x' => 'toggle_visual_mode',
-    'm' => 'toggle_selection_mode',
+   '*' => 'toggle_multiple_selection',
+   'x' => 'toggle_visual_mode',
+   'm' => 'toggle_selection_mode',
     :v => :view_selected_files
   }
   menu 'Selection Menu', h
@@ -1782,7 +1784,7 @@ end
 
 def toggle_long_listing
   toggle_value :long_listing
-  @long_listing = cget(:long_listing)
+  @long_listing = @toggles[:long_listing]
   if @long_listing
     @saved_gviscols = @gviscols
     @gviscols = 1
@@ -1803,57 +1805,38 @@ end
 # ----------------- flag related functions -----------------------------------#
 # toggles the value of a toggle flag, also setting the variable if defined
 # WARN: be careful of variable being set directly. Replace such vars one by one.
-# NOTE: please use cset
 def toggle_value flag
-  @toggles[flag] = !@toggles[flag]
-  #  TODO: 2019-04-16 - can we set a variable so we don't have to check
-  #   against a hash everywhere. variable name can be in hash too
+  x = @toggles[flag] = !@toggles[flag]
   if instance_variable_defined? "@#{flag}"
-    instance_variable_set "@#{flag}", @toggles[flag]
-    @log.debug "instance_variable_set #{flag}, #{@toggles[flag]}"
+    instance_variable_set "@#{flag}", x
+    @log.debug "instance_variable_set #{flag}, #{x}"
   end
-  message "#{flag} is set to #{@toggles[flag]}"
+  message "#{flag} is set to #{x}"
 end
 
 # rotates the value of an option that has multiple values
-# NOTE: please use cset
 def rotate_value symb
-  curr = cget(symb) # get current value
-  index = @options[symb][:values].index(curr) || 0
+  curr = @options[symb]
+  index = curr[:values].index(curr) || 0
   index += 1
-  index = 0 if index >= @options[symb][:values].count
-  x = @options[symb][:current] = @options[symb][:values][index]
-  var = @options[symb][:var]
+  index = 0 if index >= curr[:values].count
+  x = curr[:current] = curr[:values][index]
+  var = curr[:var]
   instance_variable_set "@#{var}", x if var
-  message "#{symb} is set to #{@options[symb][:current]}. "
+  message "#{symb} is set to #{x}. "
 end
 
-# get the value of a flag given the symbol.
-# NOTE: use this rather than access the hashes directly, since changes in structure
-#  may happen
-def cget symb
-  return @toggles[symb] if @toggles.key? symb
-  return @options[symb][:current] if @options.key? symb
-
-  @log.warn "CGET: #{symb} does not exist. Please check code."
-  raise ArgumentError, "CGET: #{symb} does not exist. Please check code."
-end
-
-# toggles or rotates the value of a flag
 def cset symb
   if @toggles.key? symb
     toggle_value symb
-    rescan_required
-    return true
-  end
-  if @options.key? symb
+  elsif @options.key? symb
     rotate_value symb
-    rescan_required
-    return true
+  else
+    @log.warn "CSET: #{symb} does not exist. Please check code."
+    raise ArgumentError, "CSET: #{symb} does not exist. Please check code."
   end
-
-  @log.warn "CSET: #{symb} does not exist. Please check code."
-  raise ArgumentError, "CSET: #{symb} does not exist. Please check code."
+  rescan_required
+  return true
 end
 # ----------------- end of flag related functions ----------------------------#
 
@@ -3343,6 +3326,7 @@ def scripts binding=nil
 
   # reset clears the screen, we don't want that. just unhide cursor and echo keys TODO
   partial_reset_terminal
+  @log.info "Calling #{binding}."
   system %( #{binding} "#{current_file}" )
 
   # system %(echo "#{cf}" | xargs #{binding})
@@ -3487,7 +3471,6 @@ end
 # latest source, but in some cases even this can be misleading since running a program accesses
 # include files.
 def enhance_file_list
-  # return unless cget(:enhanced_mode)
   return unless @enhanced_mode
   @current_dir ||= Dir.pwd
 
@@ -3830,6 +3813,7 @@ def run
 
     redraw rescan?
     place_cursor
+    redraw_required false
 
   end
   write_curdir
