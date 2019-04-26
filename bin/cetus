@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-25 16:04
+#  Last update: 2019-04-26 00:12
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -457,11 +457,11 @@ CURSOR_COLOR = REVERSE
 # Menubar on top of screen
 @help = "#{BOLD}?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}C-x#{BOLD_OFF} File Actions  #{BOLD}q#{BOLD_OFF} Quit "
 
-# ------------------- read_directory ------------------ #
 def read_directory
   rescan_required false
 
   @filterstr ||= 'M' # XXX can we remove from here
+  @current_dir ||= Dir.pwd
   list_files
 
   group_directories_first
@@ -525,8 +525,8 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
   sorted_files = add_slash sorted_files
   # return sorted_files
   @files = sorted_files
+  calculate_bookmarks_for_dir # we don't want to override those set by others
 end
-# ------------- end of read_directory --------------------------------#
 
 # Deal with dead links.
 def sys_stat func, file
@@ -564,6 +564,13 @@ def create_viewport
 end
 # ------------- end of create_viewport --------------------------------#
 
+# FIXME: need to update when bookmark created or deleted
+def calculate_bookmarks_for_dir
+
+  bm = @bookmarks.select { |k, v| v == @current_dir }.keys.join(',')
+  bm = " ('#{bm})" if bm && bm != ''
+  @bm = bm
+end
 # ------------------- print_title ------------------ #
 def print_title
   # print help line and version
@@ -575,10 +582,6 @@ def print_title
 
   # Add bookmark next to name of dir, if exists
   # FIXME This should not happen in other listings like find selected files etc
-  # bm = @bookmarks.key(Dir.pwd)
-  # Display multiple bookmarks. Can be calculated on changing directory ?
-  bm = @bookmarks.select { |k, v| v == @current_dir }.keys.join(',')
-  bm = " ('#{bm})" if bm && bm != ''
 
   fin = @sta + @vps
   fl = @view.size
@@ -592,7 +595,7 @@ def print_title
     fl = ix if ix
   end
 
-  t = fl.zero? ? "#{@title}#{bm}  No files." : "#{@title}#{bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr}"
+  t = fl.zero? ? "#{@title}#{@bm}  No files." : "#{@title}#{@bm}  #{@sta + 1} to #{fin} of #{fl}  #{@sorto} F:#{@filterstr}"
 
   # don't exceed columns while printing
   t = t[t.size - @gcols..-1] if t.size >= @gcols
@@ -843,6 +846,10 @@ end
 
 def set_bookmark key, dir=Dir.pwd
   @bookmarks[key] = dir
+  calculate_numeric_hotkeys
+end
+
+def calculate_numeric_hotkeys
   @hk = @bookmarks.select { |k, _| k.match?(/[0-9]/)  }.keys.sort.join('')
 end
 
@@ -930,7 +937,7 @@ def truncate_formatted_filename f, unformatted_len, wid
 
       when :right
         # FIXME: 2019-04-23 - do we need the control code at end ??
-        f[0..wid - 3] + "$ "
+        f[0..wid - 3] + '$ '
 
       when :center
 
@@ -951,8 +958,6 @@ def truncate_formatted_filename f, unformatted_len, wid
         sindex = f.index ' '
         # 4 = 2 for literals, 2 to get ahead of sindex+1
         f[0..sindex + 1] + '<' + f[sindex + 4 + excess..-1] + ' '
-        # in some cases 29/32 we are actually overlapping 2 parts above
-        #  same for 34/32
       end
   return f
 end
@@ -983,9 +988,9 @@ def get_formatted_filename ix, wid
   unformatted_len = f.length
   if unformatted_len > wid
     # take the excess out from the center on both sides
-    # TODO clear this up since no color info here
+
     f = truncate_formatted_filename(f, unformatted_len, wid)
-    f = "#{color}#{f}#{CLEAR}" if color
+    f = "#{color}#{f}#{CLEAR}" if color # NOTE clear not added if not color
 
   elsif unformatted_len < wid
 
@@ -1010,7 +1015,8 @@ def get_mark file
   return SPACE if @selected_files.empty? && @visited_files.empty?
 
   @current_dir ||= Dir.pwd
-  fullname = File.join(@current_dir, file)
+  fullname = File.expand_path(file)
+  # fullname = File.join(@current_dir, file)
 
   return GMARK if selected?(fullname)
   return '+' if visited? fullname
@@ -1175,7 +1181,8 @@ end
 
 ## toggle selection state of file
 def toggle_select f=current_file
-  if selected? File.join(@current_dir, current_file)
+  # if selected? File.join(@current_dir, current_file)
+  if selected? File.expand_path(current_file)
     remove_from_selection f
   else
     @selected_files.clear unless @multiple_selection
@@ -1389,6 +1396,7 @@ end
 ## select all entries (files and directories)
 def select_all
   dir = Dir.pwd
+  # check this out with visited_files TODO FIXME
   @selected_files = @view.map { |file| File.join(dir, file) }
   message "#{@selected_files.count} files selected."
 end
@@ -1518,6 +1526,7 @@ end
 def goto_top
   @sta = @cursor = 0
   @old_cursor = nil
+  redraw_required
 end
 
 # goto end / bottom
@@ -1525,6 +1534,7 @@ def goto_end
   @cursor = @view.size - 1
   @sta = @view.size - @pagesize
   @old_cursor = nil
+  redraw_required
 end
 
 def print_help
@@ -1635,25 +1645,25 @@ end
 # MENU MAIN
 def main_menu
   h = {
-    :a => :ag,
-   '/' => :ffind,
-    :l => :locate,
-    :v => :vidir,
-    :z => :z_interface,
-    :d => :child_dirs,
-    :r => :recent_files,
-   '1' => :select_from_visited_files,
-   '2' => :select_from_used_dirs,
-   '3' => :list_selected_files,
-    :t => :dirtree,
-   '4' => :tree,
-    :o => :order_menu,
-    :F => :filter_menu,
-    :c => :create_menu,
-    :b => :bookmark_menu,
-    :s => :selection_menu,
-    :x => :extras
-  }
+     :a => :ag,
+    '/' => :ffind,
+     :l => :locate,
+     :v => :vidir,
+     :z => :z_interface,
+     :d => :child_dirs,
+     :r => :recent_files,
+    '1' => :select_from_visited_files,
+    '2' => :select_from_used_dirs,
+    '3' => :list_selected_files,
+     :t => :dirtree,
+    '4' => :tree,
+     :o => :order_menu,
+     :F => :filter_menu,
+     :c => :create_menu,
+     :b => :bookmark_menu,
+     :s => :selection_menu,
+     :x => :extras
+   }
   menu 'Main Menu', h
 end
 
@@ -1950,6 +1960,7 @@ def extras
         g: :generators,
         B: :bindkey_ext_command,
         f: :page_flags,
+        R: :remove_from_list,
         r: :config_read,
         w: :config_write }
   key, menu_text = menu 'Extras Menu', h
@@ -2031,6 +2042,9 @@ def select_from_used_dirs
   @title = 'Used Directories'
   home = File.expand_path '~'
   @files = @used_dirs.uniq.map { |path| path.sub(home.to_s, '~') }
+  @bm =  @bindings.key('select_from_used_dirs')
+  @bm = ' (' + @bm + ')' if @bm
+  redraw_required
 end
 
 def select_from_visited_files
@@ -2038,12 +2052,9 @@ def select_from_visited_files
   @title = 'Visited Files'
   home = File.expand_path '~'
   @files = @visited_files.uniq.map { |path| path.sub(home.to_s, '~') }
-end
-
-# maybe unused ??? XXX
-def select_bookmarks
-  @title = 'Bookmarks'
-  @files = @bookmarks.values
+  @bm = @bindings.key('select_from_visited_files')
+  @bm = ' (' + @bm + ')' if @bm
+  redraw_required
 end
 
 ## part copied and changed from change_dir since we don't dir going back on top
@@ -2056,6 +2067,7 @@ def pop_dir
   ## XXX make sure the dir exists, cuold have been deleted. can be an error or crash otherwise
   @visited_dirs.push d
   Dir.chdir d
+  @current_dir = Dir.pwd # 2019-04-24 - earlier was in post_cd but too late
   post_cd
   rescan_required
 end
@@ -2066,6 +2078,7 @@ def post_cd
   @sta = @cursor = @stact = 0
   @visual_block_start = nil
   screen_settings
+  calculate_bookmarks_for_dir
 
   # goto last position cursor was in this dir
   revert_dir_pos
@@ -2235,6 +2248,7 @@ def views
   @viewctr = 0 if @viewctr > views.size
 
   @files = `zsh -c 'print -rl -- *(#{@sorto}#{@hidden}M)'`.split("\n")
+  redraw_required
 end
 
 def child_dirs
@@ -3068,6 +3082,7 @@ def move_to position
   @cursor_movement = nil # visual mode needs to redraw page
 
   # PWD has to be there in selction
+  # FIXME with visited_files
   if selected? File.join(@current_dir, current_file)
     # this depends on the direction
     # @selected_files = @selected_files - @view[star..fin]
@@ -3105,7 +3120,9 @@ def add_to_selection file
   end
   @current_dir ||= Dir.pwd
   ff.each do |f|
-    full = File.join(@current_dir, f)
+    # this is wrong if the file is a dir listing or visited files listing.
+    # full = File.join(@current_dir, f)
+    full = File.expand_path(f)
     @selected_files.push(full) unless @selected_files.include?(full)
   end
 end
@@ -3118,7 +3135,8 @@ def remove_from_selection file
   end
   @current_dir ||= Dir.pwd
   ff.each do |f|
-    full = File.join(@current_dir, f)
+    # full = File.join(@current_dir, f)
+    full = File.expand_path(f)
     @selected_files.delete full
   end
 end
@@ -3428,7 +3446,8 @@ end
 ##
 # Editing of the User Dir List.
 # remove current entry from used dirs list, since we may not want some entries being there
-#
+# Need to call this from somewhere. Test it out again.
+# Usage. Invoke `1` or `2` and select some files and then call remove
 def remove_from_list
   unless @selected_files.empty?
     sz = @selected_files.size
@@ -3436,10 +3455,24 @@ def remove_from_list
     key = get_char
     return if key != 'y'
 
-    arr = @selected_files.map { |path| File.expand_path(path) }
+    # arr = @selected_files.map { |path| File.expand_path(path) }
+    @log.debug "BEFORE: Selected files are: #{@selected_files}"
+    arr = @selected_files.map { |path|
+      if path[0] == '~'
+        path.sub('~', ENV['HOME'])
+      else
+        path
+      end
+    }
 
-    @used_dirs = @used_dirs - arr
-    @visited_files = @visited_files - arr
+    @log.debug "Selected files are: #{arr}"
+
+    @log.debug "Size of user_dirs is #{@used_dirs.count}"
+    @log.debug "Size of visited_files is #{@visited_files.count}"
+    @used_dirs -= arr
+    @visited_files -= arr
+    @log.debug "Size of user_dirs is #{@used_dirs.count} AFTER"
+    @log.debug "Size of visited_files is #{@visited_files.count} AFTER"
     unselect_all
     @modified = true
     refresh
