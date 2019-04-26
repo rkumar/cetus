@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-26 16:19
+#  Last update: 2019-04-26 16:22
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -883,7 +883,8 @@ end
 
 ## format date for file given stat
 def date_format tim
-  tim.strftime '%Y/%m/%d %H:%M:%S'
+  # tim.strftime '%Y/%m/%d %H:%M:%S'
+  tim.strftime '%Y/%m/%d %H:%M'
 end
 
 ##
@@ -1046,6 +1047,7 @@ def format_long_listing f
       last = f[-1]
       stat = File.stat(f.chop) if last == ' ' || last == '@' || last == '*'
     end
+    # TODO
     date_func = :atime
 
     f = format('%10s  %s  %s',
