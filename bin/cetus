@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-26 00:12
+#  Last update: 2019-04-26 16:19
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -44,45 +44,47 @@ VERSION = '0.2.0.1'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
+# NOTE: if changing binding to symbol, there are many places where searched as
+#  string.
 @bindings = {
-  '`' => 'main_menu',
-  '=' => 'toggle_menu',
-  'M-s' => 'selection_menu',
-  'M-o' => 'order_menu',
-  'ENTER' => 'select_current',
-  'C-p' => 'page_current',
-  'C-e' => 'edit_current',
-  'C-o' => 'open_current',
-  'C-s' => 'toggle_select',
-  'C-r' => 'reduce',
-  'C-g' => 'debug_vars',
-  '*' => 'toggle_multiple_selection',
-  'M-a' => 'select_all',
-  'M-A' => 'unselect_all',
-  '!' => 'execute',
-  ',' => 'goto_parent_dir',
-  '~' => 'goto_home_dir',
-  '-' => 'goto_previous_dir',
-  '+' => 'goto_dir', # 2019-03-07 - TODO: change binding
-  '.' => 'pop_dir',
-  ':' => 'subcommand',
-  "'" => 'goto_bookmark',
-  '"' => 'file_starting_with',
-  '/' => 'ask_regex',
-  'M-p' => 'prev_page',
-  'M-n' => 'next_page',
-  'PgUp' => 'prev_page',
-  'PgDn' => 'next_page',
-  'Home' => 'goto_top',
-  'End' => 'goto_end',
-  'SPACE' => 'next_page:Page Down',
-  'M-f' => 'select_from_visited_files',
-  'M-d' => 'select_from_used_dirs',
-  'M-b' => 'bookmark_menu',
-  'M-m' => 'create_bookmark',
-  'M-M' => 'view_bookmarks',
-  'C-c' => 'escape',
-  'ESCAPE' => 'escape',
+        '`' => 'main_menu',
+        '=' => 'toggle_menu',
+      'M-s' => 'selection_menu',
+      'M-o' => 'order_menu',
+    'ENTER' => 'select_current',
+      'C-p' => 'page_current',
+      'C-e' => 'edit_current',
+      'C-o' => 'open_current',
+      'C-s' => 'toggle_select',
+      'C-r' => 'reduce',
+      'C-g' => 'debug_vars',
+        '*' => 'toggle_multiple_selection',
+      'M-a' => 'select_all',
+      'M-A' => 'unselect_all',
+        '!' => 'execute',
+        ',' => 'goto_parent_dir',
+        '~' => 'goto_home_dir',
+        '-' => 'goto_previous_dir',
+        '+' => 'goto_dir', # 2019-03-07 - TODO: change binding
+        '.' => 'pop_dir',
+        ':' => 'subcommand',
+        "'" => 'goto_bookmark',
+        '"' => 'file_starting_with',
+        '/' => 'ask_regex',
+        'M-p' => 'prev_page',
+        'M-n' => 'next_page',
+        'PgUp' => 'prev_page',
+        'PgDn' => 'next_page',
+        'Home' => 'goto_top',
+        'End' => 'goto_end',
+        'SPACE' => 'next_page:Page Down',
+        'M-f' => 'select_from_visited_files',
+        'M-d' => 'select_from_used_dirs',
+        'M-b' => 'bookmark_menu',
+        'M-m' => 'create_bookmark',
+        'M-M' => 'view_bookmarks',
+        'C-c' => 'escape',
+        'ESCAPE' => 'escape',
   'TAB' => 'views',
   'C-i' => 'views',
   # '?' => 'dirtree',
@@ -787,6 +789,7 @@ def resolve_binding key
   # split into binding and args
   x = x.split if x
   if x
+    redraw_required # trying here so default 2019-04-26 -
     binding = x.shift
     args = x
     send(binding, *args) if binding
@@ -879,8 +882,8 @@ def readable_file_size size, precision
 end
 
 ## format date for file given stat
-def date_format t
-  t.strftime '%Y/%m/%d %H:%M:%S'
+def date_format tim
+  tim.strftime '%Y/%m/%d %H:%M:%S'
 end
 
 ##
@@ -1043,10 +1046,11 @@ def format_long_listing f
       last = f[-1]
       stat = File.stat(f.chop) if last == ' ' || last == '@' || last == '*'
     end
+    date_func = :atime
 
     f = format('%10s  %s  %s',
                readable_file_size(stat.size, 1),
-               date_format(stat.mtime),
+               date_format(stat.send(date_func)),
                f)
 
   rescue StandardError => e
@@ -1195,9 +1199,8 @@ def toggle_select f=current_file
   #  nothing else changes, so we redraw only if not multi. Also place cursor
   #  i.e. redraw current row if mutliple selection
   if @multiple_selection
+    redraw_required false
     place_cursor
-  else
-    redraw_required
   end
 end
 
@@ -1541,6 +1544,8 @@ def print_help
   page_with_tempfile do |file|
     file.puts '    HELP'
 
+    file.puts 'tilde (`) is the main menu key. Many important operations are'
+    file.puts 'available through it, or through its sub-menus.'
     file.puts
     file.puts 'To open a file or dir, press a-z A-Z (shortcut on left of file)'
     file.puts 'Ctrl-s to select file under cursor. * for multiple select.'
@@ -1561,6 +1566,8 @@ def print_help
     # We should avoid using columnate as there are several file related things.
     ary = columnate ary, (ary.size / 2) + 1
     ary.each { |line| file.puts line }
+    # TODO: 2019-04-26 - add other hashes for other menus here ?
+    # but those hashes are not available
   end
 end # print_help
 
@@ -1643,40 +1650,49 @@ def view_bookmarks
 end
 
 # MENU MAIN
+# maybe a list menu - options for date format, size format, age, truncate_from, inode etc
 def main_menu
   h = {
-     :a => :ag,
-    '/' => :ffind,
-     :l => :locate,
-     :v => :vidir,
-     :z => :z_interface,
-     :d => :child_dirs,
-     :r => :recent_files,
-    '1' => :select_from_visited_files,
-    '2' => :select_from_used_dirs,
-    '3' => :list_selected_files,
-     :t => :dirtree,
-    '4' => :tree,
-     :o => :order_menu,
-     :F => :filter_menu,
-     :c => :create_menu,
-     :b => :bookmark_menu,
-     :s => :selection_menu,
-     :x => :extras
+    a: :ag,
+    z: :z_interface,
+    t: :toggle_menu,
+    o: :order_menu,
+    F: :filter_menu,
+    f: :file_actions,
+    c: :create_menu,
+    b: :bookmark_menu,
+    s: :selection_menu,
+    v: :view_menu,
+    x: :extras
    }
   menu 'Main Menu', h
+end
+
+# if menu options returns a hash, then treat as another level menu and process
+#  rather than having to create more of these. but these can be called directly too.
+def view_menu
+  h = {
+    f: :select_from_visited_files,
+    d: :select_from_used_dirs,
+    s: :list_selected_files,
+    c: :child_dirs,
+    t: :tree,
+    r: :recent_files,
+    e: :dirtree
+  }
+  menu 'View Menu', h
 end
 
 # copy and move here ?
 def selection_menu
   h = {
-    :a => :select_all,
-    :u => :unselect_all,
-    :s => :toggle_select,
+    a: :select_all,
+    u: :unselect_all,
+    s: :toggle_select,
    '*' => 'toggle_multiple_selection',
    'x' => 'toggle_visual_mode',
    'm' => 'toggle_selection_mode',
-    :v => :view_selected_files
+    v: :view_selected_files
   }
   menu 'Selection Menu', h
 end
@@ -1705,10 +1721,14 @@ def menu title, h
   #  binding in brackets
   h.each_pair do |k, v|
     # get global binding
-    scut = @bindings.key(v.to_s)
+    vs = v.to_s
+    scut = @bindings.key(vs)
     scut = " (#{scut})" if scut
 
-    ary << " #{k}: #{v} #{scut}"
+    # ary << " #{k}: #{v} #{scut}"
+    vs = vs.sub('_menu', '...') if vs.end_with?('_menu')
+    vs = vs.tr('_', ' ')
+    ary << " [#{k}] #{vs} #{scut}"
   end
   x = ary.join("\n")
   puts `echo "#{x}" | column`
@@ -1737,8 +1757,8 @@ def toggle_menu
         l: :long_listing,
         '1' => :toggle_columns,
         d: :group_directories,
-        :e => :editor_mode,
-        :D => :debug_flag,
+        e: :editor_mode,
+        D: :debug_flag,
         '8' => :multiple_selection,
         '*' => :multiple_selection,
         'S' => :selection_mode,
@@ -1809,7 +1829,7 @@ def toggle_long_listing
     @stact = 0 # in case user was panned 2019-03-20 -
   end
   message "Long listing is #{@long_listing}, visible columns is #{@gviscols}."
-  rescan_required
+  # rescan_required
 end
 
 # ----------------- flag related functions -----------------------------------#
@@ -1961,6 +1981,7 @@ def extras
         B: :bindkey_ext_command,
         f: :page_flags,
         R: :remove_from_list,
+        v: :vidir,
         r: :config_read,
         w: :config_write }
   key, menu_text = menu 'Extras Menu', h
@@ -1982,8 +2003,8 @@ def extras
 end
 
 def filter_menu
-  h = { :d => :dirs, :f => :files, :e => :emptydirs, '0' => :emptyfiles,
-        :r => :reduce_list, :x => :extension }
+  h = { d: :dirs, f: :files, e: :emptydirs, '0' => :emptyfiles,
+        r: :reduce_list, x: :extension }
   _, menu_text = menu 'Filter Menu', h
   files = nil
   case menu_text
@@ -2044,7 +2065,7 @@ def select_from_used_dirs
   @files = @used_dirs.uniq.map { |path| path.sub(home.to_s, '~') }
   @bm =  @bindings.key('select_from_used_dirs')
   @bm = ' (' + @bm + ')' if @bm
-  redraw_required
+  # redraw_required
 end
 
 def select_from_visited_files
@@ -2054,7 +2075,7 @@ def select_from_visited_files
   @files = @visited_files.uniq.map { |path| path.sub(home.to_s, '~') }
   @bm = @bindings.key('select_from_visited_files')
   @bm = ' (' + @bm + ')' if @bm
-  redraw_required
+  # redraw_required
 end
 
 ## part copied and changed from change_dir since we don't dir going back on top
@@ -2630,6 +2651,7 @@ end
 
 # instantly move to move target. Use during bulk operations so you don't have to
 # enter or goto target dir and come back.
+# XXX try removing this, making things complex.
 def move_instant
   # FIXME: cannot be in target directory and do auto update
   # should we have a key for specifying move_target ?
@@ -2766,8 +2788,9 @@ end
 def file_actions action=nil
   h = { d: :delete, D: '/bin/rm', m: :move, v: ENV['EDITOR'] || :vim,
         c: :copy, e: :execute,
-        l: :less, p: :most,
-        o: :open_current }
+        p: :most,
+        o: :open_current,
+ }
 
   rbfiles = current_or_selected_files # use with ruby FileUtils
   return if rbfiles.nil? || rbfiles.empty?
@@ -2795,6 +2818,8 @@ def file_actions action=nil
   end
   h[:M] = :set_move_target if File.directory?(current_file)
   h[:z] = :zip unless filetype(first) == :zip
+  h['/'] = :ffind
+  h[:l] = :locate
 
   # if first file has spaces then add remspace method
   # TODO: put this in scripts
@@ -2865,6 +2890,8 @@ def file_actions action=nil
     1
     # already been executed by menu
     # We could have just put 'stat' in the menu but that doesn't look so nice
+  when :locate
+    1
   else
     return unless menu_text
 
@@ -2973,18 +3000,19 @@ def ffind
 end
 
 def locate
-  print 'Enter a file name pattern to locate: '
-  pattern = readline
+  @locate_command ||= /darwin/.match?(RUBY_PLATFORM) ? 'mdfind -name' : 'locate'
+  pattern = readline "Enter a file name pattern to #{@locate_command}: "
   return if pattern == ''
 
-  @title = "Files found using 'locate' #{pattern}"
-  files = `locate #{pattern}`.split("\n")
+  @title = "Files found using: (#{@locate_command} #{pattern})"
+  files = `#{@locate_command} #{pattern}`.split("\n")
   files.select! { |x| x = File.expand_path(x); File.exist?(x) }
   if files.empty?
     perror 'No files found.'
-  else
-    @files = files
+    return
   end
+  @files = files
+  @bm = nil
 end
 
 ##  takes directories from the z program, if you use autojump you can
@@ -3407,6 +3435,9 @@ end
 def list_selected_files
   @title = 'Selected Files'
   @files = @selected_files
+
+  @bm =  @bindings.key('list_selected_files')
+  @bm = ' (' + @bm + ')' if @bm
 end
 
 # write selected files to a file and return path
@@ -3846,7 +3877,8 @@ def run
 
     redraw rescan?
     place_cursor
-    redraw_required false
+    # 2019-04-26 - XXX removed, let it be default, let false be declared where reqd
+    # redraw_required false
 
   end
   write_curdir
