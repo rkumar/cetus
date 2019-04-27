@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-27 12:38
+#  Last update: 2019-04-27 15:06
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -329,7 +329,6 @@ IDX.freeze
 @stact = 0 # used when panning a folder to next column
 # @editor_mode = true
 @editor_mode = false # changed 2018-03-12 - so we start in pager mode
-@enhanced_mode = true
 @visual_block_start = nil
 PAGER_COMMAND = {
   text: 'most',
@@ -343,6 +342,8 @@ PAGER_COMMAND = {
 @keys_to_clear = nil # in how many strokes should message be cleared, set later.
 # ---------------------------------------------
 ## FLAGS
+@visual_mode = false
+@enhanced_mode = true
 @multiple_selection = true # single select
 @group_directories = :first
 # truncate long filenames from :right, :left or :center.
@@ -385,6 +386,7 @@ PAGER_COMMAND = {
 
 ## ----------------- CONSTANTS ----------------- ##
 GMARK = '*'
+VMARK = '+'
 CURMARK = '>'
 MSCROLL = 10
 SPACE = ' '
@@ -441,7 +443,6 @@ CURSOR_COLOR = REVERSE
 ## --------------------------------------------- ##
 
 @patt = nil
-@ignorecase = true
 @quitting = false
 @modified = @writing = false
 @visited_files = []
@@ -455,7 +456,6 @@ CURSOR_COLOR = REVERSE
 @viewctr = 0
 ## sta is where view (viewport) begins, cursor is current row/file
 @sta = @cursor = 0
-@visual_mode = false
 @status_color = 4 # status line, can be 2 3 4 5 6
 @status_color_right = 8 # status line right part
 
@@ -978,13 +978,16 @@ def get_formatted_filename ix, wid
 
   ind = get_shortcut(ix)
   mark = get_mark(f)
+  # make visited files bold
+  bcolor = BOLD if mark == VMARK
   # Handle separator before enhanced file list.
   # We do lose a shortcut
   ind = cur = mark = '-' if f == SEPARATOR
   prefix = "#{ind}#{mark}#{cur}"
 
   # fullname = f[0] == '~' ? File.expand_path(f) : f
-  color ||= color_for(f)
+  color = color_for(f)
+  color = "#{bcolor}#{color}"
 
   f = format_long_listing(f) if @long_listing
 
@@ -1024,14 +1027,16 @@ def get_mark file
 
   @current_dir ||= Dir.pwd
   fullname = File.expand_path(file)
-  # fullname = File.join(@current_dir, file)
 
   return GMARK if selected?(fullname)
-  return '+' if visited? fullname
+  return VMARK if visited? fullname
+
+  # 2019-04-27 - this boldfaces visited files, but should only be done if color
+  #  otherwise it will overflow.
+  #  This was nice but it messes with width in multiple columns truncate
+  # return "#{BOLD}+" if visited? fullname
 
   SPACE
-  # cur = CURMARK if ix + @sta == @cursor # 2019-03-29 - removed reduced calls
-  # NOTE seems like f and ary[ix] are the same
 end
 
 def format_long_listing f
@@ -1244,7 +1249,7 @@ def open_file f
     system(comm.to_s)
     setup_terminal
     # XXX maybe use absolute_path instead of hardcoding
-    f = @current_dir + '/' + f if f[0] != '/'
+    f = File.expand_path(f)
     @visited_files.insert(0, f)
     push_used_dirs @current_dir
   else
@@ -1264,13 +1269,13 @@ end
 def edit_current
   command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
   run_on_current command
-  @visited_files.insert(0, current_file)
+  @visited_files.insert(0, File.expand_path(current_file))
 end
 
 def open_current
   opener = /darwin/.match?(RUBY_PLATFORM) ? 'open' : 'xdg-open'
   run_on_current opener
-  @visited_files.insert(0, current_file)
+  @visited_files.insert(0, File.expand_path(current_file))
 end
 
 # run given command on current file
@@ -1844,7 +1849,7 @@ def toggle_long_listing
     @sta = @stact
     @stact = 0 # in case user was panned 2019-03-20 -
   end
-  message "Long listing is #{@long_listing}, visible columns is #{@gviscols}."
+  message "Long listing is #{@long_listing}, date_func is #{@date_func}. visible columns is #{@gviscols}."
   # rescan_required
 end
 
@@ -1874,13 +1879,15 @@ def rotate_value symb
 end
 
 def cset symb
+  return if symb.nil? || symb == :''
+
   if @toggles.key? symb
     toggle_value symb
   elsif @options.key? symb
     rotate_value symb
   else
     @log.warn "CSET: #{symb} does not exist. Please check code."
-    raise ArgumentError, "CSET: #{symb} does not exist. Please check code."
+    raise ArgumentError, "CSET: (#{symb}) does not exist. Please check code."
   end
   rescan_required
   return true
@@ -2232,6 +2239,8 @@ end
 
 def toggle_all
   binding = fzfmenu 'Toggles', @toggles.merge(@options)
+  return if binding.nil? || binding == ''
+
   menu_text = binding.to_sym
   return if respond_to?(menu_text, true) # already handled
 
