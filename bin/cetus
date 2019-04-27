@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-26 23:13
+#  Last update: 2019-04-27 12:38
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -340,6 +340,8 @@ PAGER_COMMAND = {
 }.freeze
 @dir_position = {}
 @cursor_movement = @old_cursor = nil # cursor movement has happened only, don't repaint
+@keys_to_clear = nil # in how many strokes should message be cleared, set later.
+# ---------------------------------------------
 ## FLAGS
 @multiple_selection = true # single select
 @group_directories = :first
@@ -349,31 +351,30 @@ PAGER_COMMAND = {
 @display_file_stats = true
 @selected_files_fullpath_flag = false
 @selected_files_escaped_flag = false
-@keys_to_clear = nil
 @ignore_case = true
 @highlight_row_flag = true # false
 @debug_flag = false
-@date_func = :mtime
+@date_func = :mtime # which date to display in long listing.
 
 # See toggle_value
 # we need to set these on startup
 @toggles = {
   ignore_case: true,
-  # group_directories: true,
   long_listing: false,
   enhanced_mode: true,
   visual_mode: false,
   display_file_stats: true,
-  toggle_selected_files_fullpath_flag: false,
-  toggle_selected_files_escaped_flag: false,
+  selected_files_fullpath_flag: false,
+  selected_files_escaped_flag: false,
   multiple_selection: true,
   editor_mode: false,
   selection_mode: false, # typing hint adds to selection, does not open
   debug_flag: false,
-  toggle_filename_status_line: true,
+  filename_status_line: true,
   instant_search: true,
   highlight_row_flag: @highlight_row_flag
 }
+# These are flags that have multiple values.
 # var is name of variable to be set
 @options = {
   truncate_from: { current: :center, values: %i[left right center], var: :truncate_from },
@@ -669,8 +670,9 @@ def print_filename_status_line cf=current_file
               date_format(File.stat(ff).mtime)
             end
   end
+  mtime = "| #{mtime} |" if mtime
   # print size and mtime only if more data requested.
-  print_on_right "| #{mtime} | #{cf}".rjust(40)
+  print_on_right "#{mtime}  #{cf}".rjust(40)
 end
 
 # should we do a read of the dir
@@ -1544,6 +1546,7 @@ def goto_end
 end
 
 def print_help
+  @log.info "Enter print_help"
   page_with_tempfile do |file|
     file.puts '    HELP'
 
@@ -1567,11 +1570,13 @@ def print_help
     end
     # FIXME: this works but not properly when long_listing is true.
     # We should avoid using columnate as there are several file related things.
-    ary = columnate ary, (ary.size / 2) + 1
+    # next line no longer working.
+    # ary = columnate ary, (ary.size / 2) + 1
     ary.each { |line| file.puts line }
     # TODO: 2019-04-26 - add other hashes for other menus here ?
     # but those hashes are not available
   end
+  @log.info "End print_help"
 end # print_help
 
 def page_stat_for_file
@@ -1666,6 +1671,7 @@ def main_menu
     b: :bookmark_menu,
     s: :selection_menu,
     v: :view_menu,
+    '`' => :goto_parent_dir,
     x: :extras
    }
   menu 'Main Menu', h
@@ -1734,7 +1740,7 @@ def menu title, h
     ary << " [#{k}] #{vs} #{scut}"
   end
   x = ary.join("\n")
-  puts `echo "#{x}" | column`
+  puts `echo '#{x}' | column`
 
   key = get_char
   binding = h[key]
@@ -1769,7 +1775,9 @@ def toggle_menu
         t: :truncate_from,
         n: :enhanced_mode,
         i: :instant_search,
-        H: :highlight_row_flag }
+        H: :highlight_row_flag,
+        '>' => :more_flags
+  }
   # TODO: add other values at end, what key ?
 
   _, menu_text = menu 'Toggle Menu', h
@@ -1789,6 +1797,11 @@ def toggle_menu
   end
 
   cset menu_text
+end
+
+# display all flags and allow selection and toggle.
+def more_flags
+  perror "TODO"
 end
 
 def toggle_columns
@@ -1849,12 +1862,13 @@ end
 
 # rotates the value of an option that has multiple values
 def rotate_value symb
-  curr = @options[symb]
-  index = curr[:values].index(curr) || 0
+  hash = @options[symb]
+  curr = hash[:current]
+  index = hash[:values].index(curr) || 0
   index += 1
-  index = 0 if index >= curr[:values].count
-  x = curr[:current] = curr[:values][index]
-  var = curr[:var]
+  index = 0 if index >= hash[:values].count
+  x = hash[:current] = hash[:values][index]
+  var = hash[:var]
   instance_variable_set "@#{var}", x if var
   message "#{symb} is set to #{x}. "
 end
@@ -1923,57 +1937,6 @@ def create_menu
   _, menu_text = menu 'Create Menu', h
 end
 
-# thse need to be placed in correct position, some do nothing
-#  and some like ffind have no menu item
-# TODO FIXME uncalled now. look into this
-def command_menu
-  #  since these involve full paths, we need more space, like only one column
-  ## in these cases, getting back to the earlier dir, back to earlier listing
-  # since we've basically overlaid the old listing
-  # should be able to sort THIS listing and not rerun command. But for that I'd need to use
-  # xargs ls -t etc rather than the zsh sort order. But we can run a filter using |.
-  #
-  h = { t: :today, D: :default_command, R: :remove_from_list,
-        v: :view_selected_files }
-  h[:e] = if @editor_mode
-            :pager_mode
-          else
-            :editor_mode
-          end
-  _, menu_text = menu 'Command Menu', h
-  case menu_text
-  when :pager_mode
-    @editor_mode = false
-    @default_command = ENV['MANPAGER'] || ENV['PAGER']
-  when :editor_mode
-    @editor_mode = true
-    @default_command = nil
-  when :ffind
-    ffind
-  when :locate
-    locate
-  when :today
-    # zshglob: M = MARK_DIRS with slash
-    # zshglob: 'm0' 'm' = modified time, '0' = 0 days ago
-    @files = `zsh -c 'print -rl -- *(#{@hidden}Mm0)'`.split("\n")
-    @title = "Today's files"
-  when :default_command
-    puts ' This no longer works'
-    puts 'Selecting a file usually invokes $EDITOR'
-    puts 'What command do you want to use repeatedly on selected files: '
-    @default_command = gets.chomp
-    if @default_command != ''
-      print 'Second part of command (maybe blank): '
-      @default_command2 = gets.chomp
-    else
-      print 'Cleared default command, will default to $EDITOR'
-      @default_command2 = nil
-      @default_command = nil
-    end
-  end
-  # redraw
-end
-
 # This is quite badly placed and named. Maybe these should go elsewhere
 def extras
   h = { '1' => :one_column,
@@ -1992,7 +1955,6 @@ def extras
   when :one_column
     @pagesize = @grows
   when :multi_column
-    # @pagesize = 60
     @pagesize = @grows * @gviscols
   when :columns
     print "How many columns to show: 1-6 [current #{@gviscols}]? "
@@ -2196,37 +2158,31 @@ end
 # Was this supposed to be augmented, or just remain limited like this
 # We should be able to do everything in the menus from here. TODO
 def subcommand
-  last_line
-  print 'Enter command: q x wq p w e r h '
+  # clear_last_line
+  # pbold 'Subcommand:'
   begin
-    command = readline
+    prompt = %(
+    [q]  quit                              [w]   config write              [d] delete
+    [x]  update config + quit              [r]   config read               [r] rename
+    [wq] write config + quit               [e]   edit file under cursor    [m] move
+    [P]  copy PWD to clipboard             [o]   open file under cursor    [c] copy
+    [p]  copy filename to clipboard        [h]   help                      [t] toggle flags
+    )
+    # command = readline 'Enter command: q x wq P p w e r h :'
+    command = readline prompt
     return if command == ''
   rescue StandardError
     return
   end
   if command == 'q'
-    # FIXME: 2019-03-22 - should this not call quit_command ?
-    if @modified
-      last_line
-      print 'Do you want to save bookmarks? (y/n): '
-      key = get_char
-      if key == 'y'
-        @writing = true
-        @quitting = true
-      elsif key == 'n'
-        @quitting = true
-        print 'Quitting without saving bookmarks'
-      else
-        perror 'No action taken.'
-      end
-    else
-      @quitting = true
-    end
+    quit_command
   elsif command == 'wq'
     @quitting = true
     @writing = true
   elsif command == 'w'
     config_write
+  elsif command == 'r'
+    config_read
   elsif command == 'x'
     @quitting = true
     @writing = true if @modified
@@ -2234,14 +2190,62 @@ def subcommand
     edit_current
   elsif command == 'o'
     open_current
-  elsif (command == 'h') || (command == 'help') || (command == '?')
+  elsif command == 'd'
+    delete_file
+  elsif command == 'c'
+    copy_file
+  elsif command == 'r'
+    rename_file
+  elsif command == 'm'
+    move_file
+  elsif command == 'h' || command == 'help' || command == '?'
     print_help
-  elsif command == 'p'
+  elsif command == 'P'
+    # or should be put current file in clip ?
     system 'echo $PWD | pbcopy'
-    puts 'Stored PWD in clipboard (using pbcopy)'
+    message 'Stored PWD in clipboard (using pbcopy)'
+  elsif command == 'p'
+    system "echo #{current_file} | pbcopy"
+    message "Stored #{current_file} in clipboard (using pbcopy)"
+  elsif command == 't' || command == 'toggle'
+    toggle_all
   else
     perror "Don't know about command #{command}. Try :h or :help"
   end
+end
+
+# 2019-03-08 - 23:46
+# FIXME returns a String not symbol, so some callers can fail
+def fzfmenu(title, h)
+  return unless h
+
+  pbold title.to_s
+  # XXX using keys not values since toggle hash being used
+  values = h.keys.join("\n")
+  binding = `echo "#{values}" | fzf --prompt="#{title.to_s} :"`
+  if binding
+    binding = binding.chomp
+    send(binding) if respond_to?(binding, true)
+  end
+  binding
+end
+
+def toggle_all
+  binding = fzfmenu 'Toggles', @toggles.merge(@options)
+  menu_text = binding.to_sym
+  return if respond_to?(menu_text, true) # already handled
+
+  # for visual and selection mode
+  # check if respond_to? symbol or toggle + symbol then call and return.
+  symb = "toggle_#{menu_text}".to_sym
+  @log.debug "trying #{symb}."
+  if respond_to?(symb, true)
+    @log.debug "calling #{symb}."
+    send(symb)
+    return
+  end
+
+  cset menu_text
 end
 
 def quit_command
