@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-27 15:06
+#  Last update: 2019-04-27 23:48
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -40,7 +40,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.2.0.1'
+VERSION = '0.2.1.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -1762,53 +1762,6 @@ def menu title, h
   [key, binding]
 end
 
-# some toggles can be invoked directly on a key, or through another menu.
-# Some go to methods like multiple_selection from a key
-# WARNING: method and toggle should not have same name, else flag will toggle twice.
-def toggle_menu
-  h = { h: :show_hidden,
-        c: :ignore_case,
-        l: :long_listing,
-        '1' => :toggle_columns,
-        d: :group_directories,
-        e: :editor_mode,
-        D: :debug_flag,
-        '8' => :multiple_selection,
-        '*' => :multiple_selection,
-        'S' => :selection_mode,
-        v: :visual_mode,
-        t: :truncate_from,
-        n: :enhanced_mode,
-        i: :instant_search,
-        H: :highlight_row_flag,
-        '>' => :more_flags
-  }
-  # TODO: add other values at end, what key ?
-
-  _, menu_text = menu 'Toggle Menu', h
-  return unless menu_text
-
-  # menu would have called if symbol only responds so return.
-  return if respond_to?(menu_text, true) # already handled
-
-  # for visual and selection mode
-  # check if respond_to? symbol or toggle + symbol then call and return.
-  symb = "toggle_#{menu_text}".to_sym
-  @log.debug "trying #{symb}."
-  if respond_to?(symb, true)
-    @log.debug "calling #{symb}."
-    send(symb)
-    return
-  end
-
-  cset menu_text
-end
-
-# display all flags and allow selection and toggle.
-def more_flags
-  perror "TODO"
-end
-
 def toggle_columns
   @gviscols = if @gviscols == 1
                 3
@@ -2041,7 +1994,6 @@ def select_from_used_dirs
 end
 
 def select_from_visited_files
-  # not yet a unique list, needs to be unique and have latest pushed to top
   @title = 'Visited Files'
   home = File.expand_path '~'
   @files = @visited_files.uniq.map { |path| path.sub(home.to_s, '~') }
@@ -2215,7 +2167,7 @@ def subcommand
     system "echo #{current_file} | pbcopy"
     message "Stored #{current_file} in clipboard (using pbcopy)"
   elsif command == 't' || command == 'toggle'
-    toggle_all
+    toggle_menu
   else
     perror "Don't know about command #{command}. Try :h or :help"
   end
@@ -2237,7 +2189,7 @@ def fzfmenu(title, h)
   binding
 end
 
-def toggle_all
+def toggle_menu
   binding = fzfmenu 'Toggles', @toggles.merge(@options)
   return if binding.nil? || binding == ''
 
@@ -3340,7 +3292,7 @@ def create_a_file
 
   system %($EDITOR "#{str}")
   setup_terminal
-  @visited_files.insert(0, str) if File.exist?(str)
+  @visited_files.insert(0, File.expand_path(str)) if File.exist?(str)
   refresh
 end
 
@@ -3496,52 +3448,39 @@ end
 # Need to call this from somewhere. Test it out again.
 # Usage. Invoke `1` or `2` and select some files and then call remove
 def remove_from_list
-  unless @selected_files.empty?
-    sz = @selected_files.size
-    print "Remove #{sz} files from used list (y)?: "
-    key = get_char
-    return if key != 'y'
 
-    # arr = @selected_files.map { |path| File.expand_path(path) }
-    @log.debug "BEFORE: Selected files are: #{@selected_files}"
-    arr = @selected_files.map { |path|
-      if path[0] == '~'
-        path.sub('~', ENV['HOME'])
-      else
-        path
-      end
-    }
-
-    @log.debug "Selected files are: #{arr}"
-
-    @log.debug "Size of user_dirs is #{@used_dirs.count}"
-    @log.debug "Size of visited_files is #{@visited_files.count}"
-    @used_dirs -= arr
-    @visited_files -= arr
-    @log.debug "Size of user_dirs is #{@used_dirs.count} AFTER"
-    @log.debug "Size of visited_files is #{@visited_files.count} AFTER"
-    unselect_all
-    @modified = true
-    refresh
-    return
-  end
-
-  # no file selected, use file under cursor
-  print
-  ## what if selected some rows
-  file = @view[@cursor]
-  print "Remove #{file} from used list (y)?: "
+  # XXX key to invoke this is difficult. make it easier
+  selfiles = if @selected_files.empty?
+               [ File.expand_path(current_file) ]
+             else
+               @selected_files
+             end
+  sz = selfiles.size
+  print "Remove #{sz} files from used list (y)?: "
   key = get_char
   return if key != 'y'
 
-  file = File.expand_path(file)
-  if File.directory? file
-    @used_dirs.delete(file)
+  # arr = @selected_files.map { |path| File.expand_path(path) }
+  # @log.debug "BEFORE: Selected files are: #{@selected_files}"
+  arr = selfiles.map { |path|
+    if path[0] == '~'
+      path.sub('~', ENV['HOME'])
+    else
+      path
+    end
+  }
+  if File.directory? arr.first
+    @used_dirs -= arr
+    # @files = @used_dirs
+    select_from_used_dirs
   else
-    @visited_files.delete(file)
+    @visited_files -= arr
+    # @files = @visited_files
+    select_from_visited_files
   end
-  refresh
+  unselect_all
   @modified = true
+  # redraw_required
 end
 
 #
