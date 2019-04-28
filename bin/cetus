@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-27 23:48
+#  Last update: 2019-04-28 14:57
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -49,6 +49,7 @@ CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 @bindings = {
         '`' => 'main_menu',
         '=' => 'toggle_menu',
+        '%' => 'filter_menu',
       'M-s' => 'selection_menu',
       'M-o' => 'order_menu',
     'ENTER' => 'select_current',
@@ -70,54 +71,51 @@ CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
         ':' => 'subcommand',
         "'" => 'goto_bookmark',
         '"' => 'file_starting_with',
-        '/' => 'ask_regex',
-        'M-p' => 'prev_page',
-        'M-n' => 'next_page',
-        'PgUp' => 'prev_page',
-        'PgDn' => 'next_page',
-        'Home' => 'goto_top',
-        'End' => 'goto_end',
-        'SPACE' => 'next_page:Page Down',
-        'M-f' => 'select_from_visited_files',
-        'M-d' => 'select_from_used_dirs',
-        'M-b' => 'bookmark_menu',
-        'M-m' => 'create_bookmark',
-        'M-M' => 'view_bookmarks',
-        'C-c' => 'escape',
-        'ESCAPE' => 'escape',
-  'TAB' => 'views',
-  'C-i' => 'views',
+        '/' => 'filter_files_by_pattern',
+      'M-p' => 'prev_page',
+      'M-n' => 'next_page',
+     'PgUp' => 'prev_page',
+     'PgDn' => 'next_page',
+     'Home' => 'goto_top',
+      'End' => 'goto_end',
+    'SPACE' => 'next_page:Page Down',
+      'M-f' => 'select_from_visited_files',
+      'M-d' => 'select_from_used_dirs',
+      'M-b' => 'bookmark_menu',
+      'M-m' => 'create_bookmark',
+      'M-M' => 'view_bookmarks',
+      'C-c' => 'escape',
+   'ESCAPE' => 'escape',
+      'TAB' => 'views',
+      'C-i' => 'views',
   # '?' => 'dirtree',
-  'D' => 'delete_file',
+        'D' => 'delete_file',
   # 'M' => 'file_actions most',
-  'M' => 'move_instant',
-  'q' => 'quit_command', # was Q now q 2019-03-04 -
+        'M' => 'move_instant',
+        'q' => 'quit_command', # was Q now q 2019-03-04 -
   # "RIGHT"   => "column_next",
-  'RIGHT' => 'select_current', # changed 2018-03-12 - for faster navigation
-  'LEFT' => 'goto_parent_dir', # changed on 2018-03-12 - earlier column_next 1
-  ']' => 'column_next: goto next column',
-  '[' => 'column_next 1: goto previous column',
-  'C-x' => 'file_actions',
-  'M--' => 'columns_incdec -1: reduce column width',
-  'M-+' => 'columns_incdec 1: increase column width',
-  'S' => 'command_file list y ls -lh',
-  'L' => 'command_file Page n less',
-  'C-d' => 'cursor_scroll_dn',
-  'C-b' => 'cursor_scroll_up',
-  'UP' => 'cursor_up',
-  'DOWN' => 'cursor_dn',
+    'RIGHT' => 'select_current', # changed 2018-03-12 - for faster navigation
+     'LEFT' => 'goto_parent_dir', # changed on 2018-03-12 - earlier column_next 1
+        ']' => 'column_next: goto next column',
+        '[' => 'column_next 1: goto previous column',
+      'C-x' => 'file_actions',
+  # 'M--' => 'columns_incdec -1: reduce column width',
+  # 'M-+' => 'columns_incdec 1: increase column width',
+  # 'L' => 'command_file Page n less: Page current file',
+      'C-d' => 'cursor_scroll_dn',
+      'C-b' => 'cursor_scroll_up',
+       'UP' => 'cursor_up',
+     'DOWN' => 'cursor_dn',
   'C-SPACE' => 'toggle_visual_mode',
-  '@' => 'scripts',
-  '#' => 'generators',
-
-  '?' => 'print_help',
-  'F1' => 'print_help',
-  'F2' => 'child_dirs',
-  'F3' => 'dirtree',
-  'F4' => 'tree',
-  'S-F1' => 'dirtree',
-  'S-F2' => 'tree'
-
+        '@' => 'scripts',
+        '#' => 'generators',
+        '?' => 'print_help',
+       'F1' => 'print_help',
+       'F2' => 'child_dirs',
+       'F3' => 'dirtree',
+       'F4' => 'tree',
+     'S-F1' => 'dirtree',
+     'S-F2' => 'tree'
 }
 
 ## clean this up a bit, copied from shell program and macro'd
@@ -509,8 +507,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
                    Dir.glob(dir)
                  end
 
-  # WARN: crashes on a dead link since no mtime
-  # HACK: use first files return value for bad link
+  # WARN: crashes on a deadlink since no mtime
   if func
     sorted_files = sorted_files.sort_by do |f|
       if File.exist? f
@@ -533,7 +530,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
   calculate_bookmarks_for_dir # we don't want to override those set by others
 end
 
-# Deal with dead links.
+# Deal with deadlinks.
 def sys_stat func, file
   return unless File.symlink? file
 
@@ -1486,8 +1483,7 @@ def goto_home_dir
   change_dir ENV['HOME']
 end
 
-# Goes to directory bookmarked with number or upper case char.
-# If lower case character given, then go to first file starting with char.
+# Goes to directory bookmarked with number or char.
 def goto_bookmark key=nil
   unless key
     clear_last_line
@@ -1508,8 +1504,8 @@ def goto_bookmark key=nil
 end
 
 ## take regex from user, to run on files on screen, user can filter file names
-def ask_regex
-  @title = 'Search Results: (Press Escape to cancel)'
+def filter_files_by_pattern
+  @title = 'Search Results: (Press Esc to cancel)'
   @mode = 'SEARCH'
   if @toggles[:instant_search]
     search_as_you_type
@@ -1551,27 +1547,28 @@ def goto_end
 end
 
 def print_help
-  @log.info "Enter print_help"
   page_with_tempfile do |file|
-    file.puts '    HELP'
+    file.puts %(
+    #{REVERSE}             HELP                           #{CLEAR}
 
-    file.puts 'tilde (`) is the main menu key. Many important operations are'
-    file.puts 'available through it, or through its sub-menus.'
-    file.puts
-    file.puts 'To open a file or dir, press a-z A-Z (shortcut on left of file)'
-    file.puts 'Ctrl-s to select file under cursor. * for multiple select.'
-    file.puts 'Ctrl-Space: Enter and exit Visual Selection mode'
-    file.puts 'Ctrl-x: file actions for selected files, or file under cursor'
-    file.puts '1-9: bookmark a dir, and go to it.'
+    Tilde (`) is the main menu key. Many important operations are
+    available through it, or through its sub-menus.
 
-    file.puts 'Use left and right arrows to move through directories'
-    file.puts
+    To open a file or dir, press a-z A-Z (shortcut on left of file)
+    Ctrl-s to select file under cursor. * for multiple select.
+    Ctrl-Space: Enter and exit Visual Selection mode
+    Ctrl-x: file actions for selected files, or file under cursor
+    1-9: bookmark a dir, and go to it.
+
+    Use left and right arrows to move through directories
+
+    )
     ary = []
     # 2019-03-19 -  if : then show text after colon
     @bindings.each_pair do |k, v|
       vv = v.tr('_', ' ')
       vv = vv.split(':')[1].strip if vv.include?(':')
-      ary.push "#{k.ljust(7)}  =>  #{vv}"
+      ary.push "   #{k.ljust(7)}  =>  #{vv}"
     end
     # FIXME: this works but not properly when long_listing is true.
     # We should avoid using columnate as there are several file related things.
@@ -1581,7 +1578,6 @@ def print_help
     # TODO: 2019-04-26 - add other hashes for other menus here ?
     # but those hashes are not available
   end
-  @log.info "End print_help"
 end # print_help
 
 def page_stat_for_file
@@ -1668,13 +1664,13 @@ def main_menu
   h = {
     a: :ag,
     z: :z_interface,
-    t: :toggle_menu,
-    o: :order_menu,
-    F: :filter_menu,
-    f: :file_actions,
-    c: :create_menu,
+    # f: :file_actions,
     b: :bookmark_menu,
+    c: :create_menu,
+    f: :filter_menu,
+    o: :order_menu,
     s: :selection_menu,
+    t: :toggle_menu,
     v: :view_menu,
     '`' => :goto_parent_dir,
     x: :extras
@@ -1688,10 +1684,11 @@ def view_menu
   h = {
     f: :select_from_visited_files,
     d: :select_from_used_dirs,
+    b: :view_bookmarks,
     s: :list_selected_files,
     c: :child_dirs,
-    t: :tree,
     r: :recent_files,
+    t: :tree,
     e: :dirtree
   }
   menu 'View Menu', h
@@ -1899,17 +1896,19 @@ end
 
 # This is quite badly placed and named. Maybe these should go elsewhere
 def extras
-  h = { '1' => :one_column,
-        '2' => :multi_column,
-        c: :columns,
-        s: :scripts,
-        g: :generators,
-        B: :bindkey_ext_command,
-        f: :page_flags,
-        R: :remove_from_list,
-        v: :vidir,
-        r: :config_read,
-        w: :config_write }
+  h = {
+    '1' => :one_column,
+    '2' => :multi_column,
+    c: :columns,
+    s: :scripts,
+    g: :generators,
+    B: :bindkey_ext_command,
+    f: :page_flags,
+    R: :remove_from_list,
+    v: :vidir,
+    r: :config_read,
+    w: :config_write
+  }
   key, menu_text = menu 'Extras Menu', h
   case menu_text
   when :one_column
@@ -1928,8 +1927,11 @@ def extras
 end
 
 def filter_menu
-  h = { d: :dirs, f: :files, e: :emptydirs, '0' => :emptyfiles,
-        r: :reduce_list, x: :extension }
+  h = { d: :dirs, f: :files,
+        e: :emptydirs, '0' => :emptyfiles,
+        r: :recent_files,
+        a: :reduce_list,   # key ??? XXX
+        x: :extension }
   _, menu_text = menu 'Filter Menu', h
   files = nil
   case menu_text
@@ -1957,11 +1959,16 @@ def filter_menu
     files = reduce
   when :extension
     files = filter_for_current_extension
+  when :recent_files
+    # files = recent_files
+    @title = 'Filter: files by mtime'
+    files = get_files_by_mtime.first(10)
   end
   if files && files.count > 0
     @files = files
     @stact = 0
     @message = "Filtered on #{menu_text}. Press ESC to return."
+    @bm = ' (' + @bindings.key('filter_menu') + ') '
   else
     perror 'Sorry, No files. '
     @title = nil
@@ -1970,11 +1977,11 @@ end
 
 def reduce pattern=nil
   unless pattern
-    last_line 'Enter a pattern to reduce current list: '
-    pattern = gets.chomp
+    pattern = readline 'Enter a pattern to reduce current list: '
   end
   @title = "Filter: pattern #{pattern}"
-  @files = @files.select { |f| f.match(pattern) }
+  @bm = "(%r)"
+  @files = @files.select { |f| f.match?(pattern) }
 end
 
 def filter_for_current_extension
@@ -2754,19 +2761,27 @@ end
 # 2019-03-08 - TODO when a file name changes or moves it must be removed
 #  from selection
 def file_actions action=nil
-  h = { d: :delete, D: '/bin/rm', m: :move, v: ENV['EDITOR'] || :vim,
-        c: :copy, e: :execute,
-        p: :most,
-        o: :open_current,
- }
+  h = {
+    d: :delete,
+    D: '/bin/rm',
+    m: :move,
+    c: :copy,
+    r: :rename,
+    e: :execute,
+    v: ENV['EDITOR'] || :vim,
+    o: :open_current,
+    p: :most
+  }
 
   rbfiles = current_or_selected_files # use with ruby FileUtils
   return if rbfiles.nil? || rbfiles.empty?
 
   count = rbfiles.count
   first = rbfiles.first
+
+  h.delete(:r) if count > 1
+
   if count == 1
-    h[:r] = :rename
 
     # add chdir if dir of file under cursor is not same as current dir
     h[:C] = :chdir if File.dirname(File.expand_path(first)) != Dir.pwd
@@ -2833,10 +2848,6 @@ def file_actions action=nil
     rename_file
 
   when :chdir
-    # will only work if one selected. Check this out
-    # This works if you have searched for files and got a list
-    #  with different paths.
-    #  This should not be shown in regular listings XXX
     change_dir File.dirname(File.expand_path(rbfiles.first)) if count == 1
 
   when :set_move_target
@@ -3450,11 +3461,7 @@ end
 def remove_from_list
 
   # XXX key to invoke this is difficult. make it easier
-  selfiles = if @selected_files.empty?
-               [ File.expand_path(current_file) ]
-             else
-               @selected_files
-             end
+  selfiles = current_or_selected_files
   sz = selfiles.size
   print "Remove #{sz} files from used list (y)?: "
   key = get_char
@@ -3463,19 +3470,17 @@ def remove_from_list
   # arr = @selected_files.map { |path| File.expand_path(path) }
   # @log.debug "BEFORE: Selected files are: #{@selected_files}"
   arr = selfiles.map { |path|
-    if path[0] == '~'
-      path.sub('~', ENV['HOME'])
+    if path[0] != '/'
+      File.expand_path(path)
     else
       path
     end
   }
   if File.directory? arr.first
     @used_dirs -= arr
-    # @files = @used_dirs
     select_from_used_dirs
   else
     @visited_files -= arr
-    # @files = @visited_files
     select_from_visited_files
   end
   unselect_all
@@ -3710,7 +3715,13 @@ def gfb dir, func
   dir = dir.gsub('//', '/')
 
   # sort by time and then reverse so latest first.
-  sorted_files = Dir[dir].sort_by { |f| File.send(func, f) }.reverse
+  sorted_files = Dir[dir].sort_by { |f|
+      if File.exist? f
+        File.send(func, f)
+      else
+        sys_stat(func, f)
+      end
+  }.reverse
 
   # add slash to directories
   sorted_files = add_slash sorted_files
