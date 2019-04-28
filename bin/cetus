@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-28 14:57
+#  Last update: 2019-04-28 23:27
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -40,7 +40,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.2.1.0'
+VERSION = '0.2.2.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -521,7 +521,7 @@ def list_files dir='*', sorto=@sorto, hidden=@hidden, _filter=@filterstr
   sorted_files.sort! { |w1, w2| w1.casecmp(w2) } if func == :path && @ignore_case
 
   # zsh gives mtime sort with latest first, ruby gives latest last
-  sorted_files.reverse! if sorto[0] == 'O'
+  sorted_files.reverse! if sorto && sorto[0] == 'O'
 
   # add slash to directories
   sorted_files = add_slash sorted_files
@@ -1363,7 +1363,6 @@ end
 ## clear sort order and refresh listing, used typically if you are in some view
 #  such as visited dirs or files
 def escape
-  @sorto = nil
   @sorto = @default_sort_order
   @viewctr = 0
   @title = nil
@@ -1742,6 +1741,11 @@ def menu title, h
     ary << " [#{k}] #{vs} #{scut}"
   end
   x = ary.join("\n")
+  # echo column line bombs when x contains a single quote.
+  # If i double quote it then it bombs with double quote or backtick
+  #  and prints the entire main menu two times.
+  x = x.gsub("'", 'single quote')
+  # x = x.gsub("`", "back-tick")
   puts `echo '#{x}' | column`
 
   key = get_char
@@ -1878,6 +1882,8 @@ def order_menu
     lo = '/'
   when :clear
     lo = ''
+  else
+    return
   end
   ## This needs to persist and be a part of all listings, put in change_dir.
   @sorto = lo
@@ -1963,6 +1969,8 @@ def filter_menu
     # files = recent_files
     @title = 'Filter: files by mtime'
     files = get_files_by_mtime.first(10)
+  else
+    return
   end
   if files && files.count > 0
     @files = files
