@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-04-28 23:27
+#  Last update: 2019-05-11 10:19
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -40,7 +40,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.2.2.0'
+VERSION = '0.2.3.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
@@ -654,7 +654,7 @@ end
 
 def print_filename_status_line cf=current_file
   if @display_file_stats
-    ff = if cf[0] == '~'
+    ff = if cf.start_with?("~/")
            File.expand_path(cf)
          else
            cf
@@ -982,7 +982,6 @@ def get_formatted_filename ix, wid
   ind = cur = mark = '-' if f == SEPARATOR
   prefix = "#{ind}#{mark}#{cur}"
 
-  # fullname = f[0] == '~' ? File.expand_path(f) : f
   color = color_for(f)
   color = "#{bcolor}#{color}"
 
@@ -1023,7 +1022,12 @@ def get_mark file
   return SPACE if @selected_files.empty? && @visited_files.empty?
 
   @current_dir ||= Dir.pwd
-  fullname = File.expand_path(file)
+  # this crashes on filename that starts with a ~. 2019-05-04 -
+  fullname = if file.start_with?("~/")
+               File.expand_path(file)
+             else
+               File.join(@current_dir, file)
+             end
 
   return GMARK if selected?(fullname)
   return VMARK if visited? fullname
@@ -1044,7 +1048,7 @@ def format_long_listing f
     if File.exist? f
       stat = File.stat(f)
     elsif f[0] == '~'
-      stat = File.stat(File.expand_path(f))
+      stat = File.stat(expand_path(f))
     elsif File.symlink?(f)
       # dead link
       stat = File.lstat(f)
@@ -1071,7 +1075,8 @@ end
 # determine color for a filename based on extension, then pattern, then filetype
 def color_for f
   return nil if f == SEPARATOR
-  fname = f[0] == '~' ? File.expand_path(f) : f
+
+  fname = f.start_with?("~/") ? File.expand_path(f) : f
 
   extension = File.extname(fname)
   color = @ls_color[extension]
@@ -1082,7 +1087,7 @@ def color_for f
     @ls_pattern.each_pair do |k, v|
       # if fname.match?(/k/)
       if /#{k}/.match?(fname)
-        # @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
+        @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
         return v
         # else
         # @log.debug "#{fname} di not match #{k}. color is #{v[1..-2]}"
@@ -1166,6 +1171,7 @@ def parse_ls_colors
       # @log.debug "COLOR: ftype #{patt}"
     end
   end
+  @log.debug "LSP: #{@ls_pattern.values}"
 end
 
 ## select file based on key pressed
@@ -1193,7 +1199,7 @@ end
 ## toggle selection state of file
 def toggle_select f=current_file
   # if selected? File.join(@current_dir, current_file)
-  if selected? File.expand_path(current_file)
+  if selected? expand_path(current_file)
     remove_from_selection f
   else
     @selected_files.clear unless @multiple_selection
@@ -1220,7 +1226,7 @@ end
 def open_file f
   return unless f
 
-  f = File.expand_path(f) if f[0] == '~'
+  f = File.expand_path(f) if f.start_with?("~/")
   unless File.exist? f
     # this happens if we use (T) in place of (M)
     # it places a space after normal files and @ and * which borks commands
@@ -1246,7 +1252,7 @@ def open_file f
     system(comm.to_s)
     setup_terminal
     # XXX maybe use absolute_path instead of hardcoding
-    f = File.expand_path(f)
+    f = expand_path(f)
     @visited_files.insert(0, f)
     push_used_dirs @current_dir
   else
@@ -1266,13 +1272,13 @@ end
 def edit_current
   command = ENV['EDITOR'] || ENV['VISUAL'] || 'vim'
   run_on_current command
-  @visited_files.insert(0, File.expand_path(current_file))
+  @visited_files.insert(0, expand_path(current_file))
 end
 
 def open_current
   opener = /darwin/.match?(RUBY_PLATFORM) ? 'open' : 'xdg-open'
   run_on_current opener
-  @visited_files.insert(0, File.expand_path(current_file))
+  @visited_files.insert(0, expand_path(current_file))
 end
 
 # run given command on current file
@@ -1280,7 +1286,7 @@ def run_on_current command
   f = current_file
   return unless f
 
-  f = File.expand_path(f)
+  f = expand_path(f)
   return unless File.readable?(f)
 
   f = Shellwords.escape(f)
@@ -1340,7 +1346,7 @@ def change_dir f
   @visited_dirs.insert(0, Dir.pwd)
   save_dir_pos
 
-  f = File.expand_path(f)
+  f = expand_path(f)
   Dir.chdir f
   @current_dir = Dir.pwd # 2019-04-24 - earlier was in post_cd but too late
   read_directory
@@ -1429,7 +1435,7 @@ def goto_dir
   ensure
     # print "\e[?25l"
   end
-  f = File.expand_path(path)
+  f = expand_path(path)
   unless File.directory? f
     ## check for env variable
     tmp = ENV[path]
@@ -2696,7 +2702,7 @@ def command_file prompt, *command
   perror 'Command Cancelled' unless file
   return unless file
 
-  file = File.expand_path(file)
+  file = expand_path(file)
   if File.exist? file
     file = Shellwords.escape(file)
     pbold "#{command} #{file} (#{pauseyn})"
@@ -2901,13 +2907,13 @@ end
 # remove non-existent files from select list due to move or delete
 #  or rename or whatever
 def clean_selected_files
-  @selected_files.select! { |x| x = File.expand_path(x); File.exist?(x) }
+  @selected_files.select! { |x| x = expand_path(x); File.exist?(x) }
 end
 
 # set the default target for further moves
 # We need to also be able to set it to current dir in which user is. TODO
 def set_move_target cf=current_file
-  ff = File.expand_path(cf)
+  ff = expand_path(cf)
   return unless File.directory? ff
 
   @move_target = ff
@@ -2993,7 +2999,7 @@ def locate
 
   @title = "Files found using: (#{@locate_command} #{pattern})"
   files = `#{@locate_command} #{pattern}`.split("\n")
-  files.select! { |x| x = File.expand_path(x); File.exist?(x) }
+  files.select! { |x| x = expand_path(x); File.exist?(x) }
   if files.empty?
     perror 'No files found.'
     return
@@ -3137,7 +3143,7 @@ def add_to_selection file
   ff.each do |f|
     # this is wrong if the file is a dir listing or visited files listing.
     # full = File.join(@current_dir, f)
-    full = File.expand_path(f)
+    full = expand_path(f)
     @selected_files.push(full) unless @selected_files.include?(full)
   end
 end
@@ -3151,7 +3157,7 @@ def remove_from_selection file
   @current_dir ||= Dir.pwd
   ff.each do |f|
     # full = File.join(@current_dir, f)
-    full = File.expand_path(f)
+    full = expand_path(f)
     @selected_files.delete full
   end
 end
@@ -3311,7 +3317,7 @@ def create_a_file
 
   system %($EDITOR "#{str}")
   setup_terminal
-  @visited_files.insert(0, File.expand_path(str)) if File.exist?(str)
+  @visited_files.insert(0, expand_path(str)) if File.exist?(str)
   refresh
 end
 
@@ -3435,7 +3441,7 @@ def write_selected_files
   # fname = File.join(File.dirname(CONFIG_FILE), 'selected_files')
   # 2019-04-10 - changed to ~/tmp otherwise confusion about location
   fname = File.join('~/tmp/', 'selected_files')
-  fname = File.expand_path(fname)
+  fname = expand_path(fname)
 
   # remove file if no selection
   if @selected_files.empty?
@@ -3479,7 +3485,7 @@ def remove_from_list
   # @log.debug "BEFORE: Selected files are: #{@selected_files}"
   arr = selfiles.map { |path|
     if path[0] != '/'
-      File.expand_path(path)
+      expand_path(path)
     else
       path
     end
@@ -3813,6 +3819,14 @@ end
 # indicate that only cursor moved, so don't redraw or rescan
 def only_cursor_moved flag=true
   @cursor_movement = flag
+end
+
+# Had to create this since ruby crashes on files start with '~'
+def expand_path file
+  return File.expand_path(file) if file.start_with?("~/")
+  return file if file[0] == '/'
+
+  return File.join(@current_dir, file)
 end
 
 # main loop which calls all other programs
