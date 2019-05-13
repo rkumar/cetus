@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-05-11 10:19
+#  Last update: 2019-05-13 14:11
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -576,7 +576,7 @@ end
 # ------------------- print_title ------------------ #
 def print_title
   # print help line and version
-  print "#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
+  print "\r#{GREEN}#{@help}  #{BLUE}cetus #{VERSION}#{CLEAR}\n"
   @current_dir ||= Dir.pwd
 
   # print 1 of n files, sort order, filter etc details
@@ -602,10 +602,11 @@ def print_title
   # don't exceed columns while printing
   t = t[t.size - @gcols..-1] if t.size >= @gcols
 
-  print "#{BOLD}#{t}#{CLEAR}"
+  print "\r#{BOLD}#{t}#{CLEAR}"
 
   tput_cup(-1, @gcols - @hk.length - 2)
   puts '[' + @hk + ']'
+  print "\r"
 
   print "#{CURSOR_COLOR}EMPTY#{CLEAR}" if fl == 0
 end
@@ -700,7 +701,7 @@ def draw_directory
   buff = columnate @viewport, @grows
 
   # starts printing array on line 3
-  buff.each { |line| print line, "\n" }
+  buff.each { |line| print "\r", line, "\n" }
   print
 
   status_line
@@ -1087,7 +1088,7 @@ def color_for f
     @ls_pattern.each_pair do |k, v|
       # if fname.match?(/k/)
       if /#{k}/.match?(fname)
-        @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
+        # @log.debug "#{fname} matched #{k}. color is #{v[1..-2]}"
         return v
         # else
         # @log.debug "#{fname} di not match #{k}. color is #{v[1..-2]}"
@@ -1171,7 +1172,7 @@ def parse_ls_colors
       # @log.debug "COLOR: ftype #{patt}"
     end
   end
-  @log.debug "LSP: #{@ls_pattern.values}"
+  # @log.debug "LSP: #{@ls_pattern.values}"
 end
 
 ## select file based on key pressed
@@ -3835,6 +3836,11 @@ def run
     reset_terminal
     exit
   end
+  Signal.trap('WINCH') do
+    screen_settings
+    redraw
+    place_cursor
+  end
 
   setup_terminal
   config_read
@@ -3865,8 +3871,6 @@ def run
 
     redraw rescan?
     place_cursor
-    # 2019-04-26 - XXX removed, let it be default, let false be declared where reqd
-    # redraw_required false
 
   end
   write_curdir
