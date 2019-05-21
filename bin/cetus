@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-05-21 11:30
+#  Last update: 2019-05-21 11:33
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -41,7 +41,7 @@ now = Time.now.strftime("%Y-%m-%d %H:%M:%S")
 # alias c=~/bin/cetus.rb
 # c
 
-VERSION = '0.3.0.0'
+VERSION = '0.3.1.0'
 CONFIG_PATH = ENV['XDG_CONFIG_HOME'] || File.join(ENV['HOME'], '.config')
 CONFIG_FILE = "#{CONFIG_PATH}/cetus/conf.yml"
 
