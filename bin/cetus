@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-05-15 09:19
+#  Last update: 2019-05-21 11:30
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -728,6 +728,13 @@ def place_cursor color=CURSOR_COLOR
   end
 
   c = @cursor - @sta
+
+  # NOTE: cursor can be higher that viewport !!!
+  # we need to move it to next page TODO 2019-05-21 -
+  if c > @vps
+    c = 0
+  end
+
   wid = get_width @vps, @grows
   if c < @grows
     rows = c
@@ -3009,7 +3016,7 @@ def locate
 
   @title = "Files found using: (#{@locate_command} #{pattern})"
   files = `#{@locate_command} #{pattern}`.split("\n")
-  files.select! { |x| x = expand_path(x); File.exist?(x) }
+  files.select! { |x| File.exist?(File.expand_path(x)) }
   if files.empty?
     perror 'No files found.'
     return
