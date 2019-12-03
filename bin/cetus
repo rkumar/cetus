@@ -8,7 +8,7 @@
 #       Author: rkumar http://github.com/rkumar/cetus/
 #         Date: 2013-02-17 - 17:48
 #      License: GPL
-#  Last update: 2019-06-01 12:53
+#  Last update: 2019-06-20 09:24
 # --------------------------------------------------------------------------- #
 #  cetus.rb  Copyright (C) 2012-2019 rahul kumar
 # == CHANGELOG
@@ -458,10 +458,13 @@ CURSOR_COLOR = REVERSE
 @status_color = 4 # status line, can be 2 3 4 5 6
 @status_color_right = 8 # status line right part
 
+@now = Time.now
+
 # Menubar on top of screen
 @help = "#{BOLD}?#{BOLD_OFF} Help   #{BOLD}`#{BOLD_OFF} Menu   #{BOLD}!#{BOLD_OFF} Execute   #{BOLD}=#{BOLD_OFF} Toggle   #{BOLD}C-x#{BOLD_OFF} File Actions  #{BOLD}q#{BOLD_OFF} Quit "
 
 def read_directory
+  @now = Time.now
   rescan_required false
 
   @filterstr ||= 'M' # XXX can we remove from here
@@ -969,9 +972,10 @@ def truncate_formatted_filename f, unformatted_len, wid
         # NOTE: we cannot remove the hint
         # for single hints we need to add extra space
         # there could be escape codes of varying length
-        sindex = f.index ' '
+        sindex = f.index(' ') || f.index('+')
         # 4 = 2 for literals, 2 to get ahead of sindex+1
-        f[0..sindex + 1] + '<' + f[sindex + 4 + excess..-1] + ' '
+        # FIXME crashing here, maybe there was a plus sign in place of space
+        f[0..sindex + 0] + '<' + f[sindex + 3 + excess..-1] + ' '
       end
   return f
 end
@@ -2830,7 +2834,10 @@ def file_actions action=nil
             end
 
   end
-  h[:M] = :set_move_target if File.directory?(current_file)
+  # 2019-06-20 - FIXME next line crashes current_file is nil
+  if current_file
+    h[:M] = :set_move_target if File.directory?(current_file)
+  end
   h[:z] = :zip unless filetype(first) == :zip
   h['/'] = :ffind
   h[:l] = :locate
@@ -2900,7 +2907,7 @@ def file_actions action=nil
     1
     # already been executed by menu
     # We could have just put 'stat' in the menu but that doesn't look so nice
-  when :locate
+  when :locate, :ffind
     1
   else
     return unless menu_text
@@ -3560,10 +3567,16 @@ def enhance_file_list
     # if so , expand lib and maybe bin, put a couple recent files
     # FIXME: gemspec file will be same as current folder
     if @files.index('Gemfile') || !@files.grep(/\.gemspec/).empty?
+
+      if @files.index('app/')
+        insert_into_list('config/', "config/routes.rb")
+      end
+
       # usually the lib dir has only one file and one dir
+      # NOTE: avoid lib if rails project
       flg = false
       @files.concat get_important_files(@current_dir)
-      if @files.index('lib/')
+      if @files.index('lib/') && !@files.index('app/')
         # get first five entries by modification time
         # f1 = `zsh -c 'print -rl -- lib/*(om[1,5]MN)'`.split("\n")
         f = get_files_by_mtime('lib')&.first(5)
@@ -3574,6 +3587,7 @@ def enhance_file_list
         end
 
         # look into lib file for that project
+        # lib has a dir in it with the gem name
         dd = File.basename(@current_dir)
         if f.index("lib/#{dd}/")
           # f1 = `zsh -c 'print -rl -- lib/#{dd}/*(om[1,5]MN)'`.split("\n")
@@ -3587,18 +3601,43 @@ def enhance_file_list
       end
 
       # look into bin directory and get first five modified files
-      if @files.index('bin/')
+      # FIXME: not in the case of rails, only for commandline programs
+      if @files.index('bin/') && !@files.index('app/')
         # f1 = `zsh -c 'print -rl -- bin/*(om[1,5]MN)'`.split("\n")
         f = get_files_by_mtime('bin')&.first(5)
         # @log.warn "2768 f1 #{f1} != #{f} in bin/" if f1 != f
         insert_into_list('bin/', f) if f && !f.empty?
         flg = true
       end
+
+      # oft used rails files
+      # TODO remove concerns dir
+      # FIXME too many files added, try adding recent only
+      if @files.index('app/')
+        [ "app/controllers", "app/models", "app/views" ].each do |dir|
+          f = get_files_by_mtime(dir)&.first(5)
+          if f && !f.empty?
+            @log.debug "f has #{f.count} files before"
+            @log.debug "f has #{f} files before"
+            f = get_recent(f)
+            @log.debug "f has #{f.count} files after"
+            @log.debug "f has #{f} files after"
+            insert_into_list("#{dir}/", f) unless f.empty?
+          end
+        end
+
+        insert_into_list('config/', "config/routes.rb")
+
+        # top 3 dirs in app dir
+        f = get_files_by_mtime('app/')&.first(3)
+        insert_into_list('app/', f) if f && !f.empty?
+        flg = true
+      end
       return if flg
 
-      # lib has a dir in it with the gem name
 
-    end
+    end  # Gemfile
+
     # 2019-06-01 - added for crystal and other languages
     if @files.index('src/')
       f = get_files_by_mtime('src')&.first(5)
@@ -3676,6 +3715,16 @@ def insert_into_list _dir, file
   @files.push(*file)
 end
 
+def get_recent(array)
+  array = array.select do |f|
+    stat = File.stat(f)
+    span = @now - stat.mtime
+    spandays = span / 86400
+    spandays < 3
+  end
+  array
+end
+
 # Get visited files and bookmarks that are inside this directory
 #  at a lower level.
 # 2019-03-23 - not exactly clear what is happening XXX
@@ -3692,6 +3741,7 @@ def get_important_files dir
   @visited_files.each do |e|
     list << e[l..-1] if e.index(dir) == 0
   end
+  list = get_recent(list)
 
   # bookmarks if it starts with this directory then add it
   # FIXME it puts same directory cetus into the list with full path
