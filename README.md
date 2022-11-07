@@ -15,6 +15,7 @@ Tested with ruby 2.6
 
 ### Latest changes:
 
+* 2022-11-07 - trying to login into gh account
 * 2019-04-23 - Major cleanup and rewrite, once again show highlighted row. V 0.2.0
 * 2019-03-26 - Reading up 'LS_COLORS' and coloring filenames. v0.1.30
 * 2019-03-24 - Major refactoring and cleanup. v 0.1.29
